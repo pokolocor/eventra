@@ -23,6 +23,7 @@ const state = {
   activeDecision: null,
   polling: null,
   killSwitch: false,
+  online: false,
 };
 
 /* ---------------- formatting ---------------- */
@@ -78,17 +79,51 @@ function toast(message, kind = "ok") {
 }
 
 /* ---------------- boot ---------------- */
+async function loadAll() {
+  await refreshStatus();
+  await Promise.all([
+    refreshPortfolio(), refreshEvents(), refreshTemplates(),
+    refreshDecisions(), refreshTrades(),
+  ]);
+}
+
 async function boot() {
   renderChainShell();
   try {
-    await refreshStatus();
-    await Promise.all([refreshPortfolio(), refreshEvents(), refreshTemplates(), refreshDecisions()]);
+    await loadAll();
     setConn(true);
+    state.online = true;
   } catch (err) {
+    state.online = false;
     setConn(false);
-    toast("Cannot reach the Eventra API: " + err.message, "err");
+    showOfflineBanner(err && err.message);
   }
   setInterval(tick, 4000);
+}
+
+function showOfflineBanner(reason) {
+  let el = document.getElementById("offlineBanner");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "offlineBanner";
+    el.className = "offline-banner";
+    el.innerHTML =
+      '<div class="ob-text"><span class="ob-dot"></span>' +
+      '<strong>Cannot reach the Eventra API.</strong>' +
+      '<span class="ob-sub">The local server is not running. Start it, then Eventra reconnects automatically.</span></div>' +
+      '</div>' +
+      '<button class="ob-btn" type="button">RETRY NOW</button>';
+    el.querySelector(".ob-btn").addEventListener("click", () => { tick(); });
+    document.body.insertBefore(el, document.body.firstChild);
+  }
+  const sub = el.querySelector(".ob-sub");
+  if (sub && reason) sub.textContent = "Retrying every 4s - " + reason;
+  el.style.display = "flex";
+}
+
+function hideOfflineBanner() {
+  const el = document.getElementById("offlineBanner");
+  if (el) el.style.display = "none";
 }
 
 function setConn(ok) {
@@ -111,11 +146,26 @@ async function refreshStatus() {
 }
 
 async function tick() {
+  const wasOnline = state.online;
   try {
-    await refreshStatus();
-    await Promise.all([refreshPortfolio(), refreshEvents(), refreshTrades()]);
+    if (wasOnline) {
+      await refreshStatus();
+      await Promise.all([refreshPortfolio(), refreshEvents(), refreshTrades()]);
+    } else {
+      await loadAll();
+    }
+    state.online = true;
     setConn(true);
-  } catch (_) { setConn(false); }
+    hideOfflineBanner();
+    if (!wasOnline && state.status) toast("Reconnected to the Eventra API", "ok");
+  } catch (_) {
+    if (wasOnline) {
+      toast("Lost connection to the Eventra API - retrying...", "err");
+      showOfflineBanner("connection lost");
+    }
+    state.online = false;
+    setConn(false);
+  }
 }
 
 /* ---------------- KPIs ---------------- */

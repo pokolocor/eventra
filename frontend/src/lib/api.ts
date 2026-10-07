@@ -13,8 +13,7 @@ import type {
  * which Next.js rewrites to the Python backend (see next.config.mjs).
  * No secrets are exposed to the client.
  */
-const BASE = process.env.NEXT_PUBLIC_EVENTRA_API_URL?.replace(/\/$/, "") ?? "";
-
+const BASE = "https://eventra-1-9ltz.onrender.com";
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     cache: "no-store",
