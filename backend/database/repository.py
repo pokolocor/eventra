@@ -17,8 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from backend.config import Settings
 from backend.models.domain import DecisionRun, EquityPoint, Event, Position, Trade
+from backend.database.state import PortfolioState, SystemState
 
 class Repository(ABC):
     # --- events ---------------------------------------------------------
