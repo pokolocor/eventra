@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-950 text-[#e6edf7] font-sans text-[13px] antialiased;
+  background-image:
+    radial-gradient(1200px 600px at 80% -10%, rgba(76, 154, 255, 0.07), transparent 60%),
+    radial-gradient(900px 500px at 0% 0%, rgba(157, 123, 255, 0.05), transparent 55%);
+}
+
+@layer components {
+  .panel {
+    @apply flex min-h-0 flex-col overflow-hidden rounded-lg border border-edge
+      bg-gradient-to-b from-ink-850 to-ink-900;
+  }
+  .panel-head {
+    @apply flex items-center justify-between gap-3 border-b border-edge
+      bg-white/[0.015] px-3 py-2;
+  }
+  .panel-title {
+    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-muted;
+  }
+  .panel-body {
+    @apply min-h-0 p-3;
+  }
+  .badge {
+    @apply whitespace-nowrap rounded-[3px] border border-edge-bright bg-ink-800
+      px-2 py-1 font-mono text-[10px] tracking-[0.08em] text-muted;
+  }
+  .btn {
+    @apply rounded border border-edge-bright bg-ink-800 px-2.5 py-1 font-mono text-[11px]
+      tracking-[0.06em] text-[#e6edf7] transition hover:border-info hover:text-white
+      disabled:cursor-not-allowed disabled:opacity-45;
+  }
+  .tag {
+    @apply rounded-[3px] border border-edge bg-[#0a1119] px-1.5 py-0.5
+      font-mono text-[9.5px] uppercase tracking-[0.06em] text-dim;
+  }
+  .tag-sym {
+    @apply border-[#1d4550] text-cyan2;
+  }
+  .kpi {
+    @apply relative overflow-hidden rounded-lg border border-edge
+      bg-gradient-to-b from-ink-850 to-ink-900 px-3.5 py-3;
+  }
+  .table-fin {
+    @apply w-full border-collapse font-mono text-[11px];
+  }
+  .table-fin thead th {
+    @apply sticky top-0 z-[1] border-b border-edge-bright bg-[#0b1119] px-2 py-1.5 text-right
+      text-[9.5px] font-semibold uppercase tracking-[0.1em] text-dim;
+  }
+  .table-fin thead th:first-child {
+    @apply text-left;
+  }
+  .table-fin tbody td {
+    @apply whitespace-nowrap border-b border-[#131c27] px-2 py-1.5 text-right;
+  }
+  .table-fin tbody td:first-child {
+    @apply text-left font-semibold tracking-[0.04em];
+  }
+  .table-fin tbody tr:hover {
+    @apply bg-[#101823];
+  }
+}
+
+@layer utilities {
+  .pos { @apply text-bull; }
+  .neg { @apply text-bear; }
+  .neu { @apply text-muted; }
+  .scroll-thin { scrollbar-width: thin; scrollbar-color: #26334a transparent; }
+  .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background: #26334a; border-radius: 4px; }
+}

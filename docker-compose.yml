@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: eventra-db
+    environment:
+      POSTGRES_USER: eventra
+      POSTGRES_PASSWORD: eventra
+      POSTGRES_DB: eventra
+    ports:
+      - "5432:5432"
+    volumes:
+      - eventra_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventra"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: eventra-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://eventra:eventra@db:5432/eventra
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
+      EVENTRA_DEMO_MODE: ${EVENTRA_DEMO_MODE:-true}
+      EVENTRA_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+
+volumes:
+  eventra_pgdata:

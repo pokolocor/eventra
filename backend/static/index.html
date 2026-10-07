@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eventra — From Events to Execution</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' x='4' font-size='26' fill='%2337d0d8'>&#9670;</text></svg>" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">&#9670;</div>
+    <div>
+      <h1>EVENTRA</h1>
+      <p>From Events to Execution</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span class="badge mode" id="modeBadge">PAPER / DEMO</span>
+    <span class="badge" id="llmBadge">LLM &mdash;</span>
+    <span class="badge" id="dbBadge">STORE &mdash;</span>
+    <span class="badge ok" id="connBadge">CONNECTING</span>
+    <button class="kill" id="killSwitch" title="Global emergency stop">KILL SWITCH</button>
+    <button class="ghost" id="resetBtn" title="Reset the simulated book">RESET</button>
+  </div>
+</header>
+
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid-3">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Live Event Feed</h2>
+        <div class="row">
+          <span class="badge" id="eventCount">0 events</span>
+          <button class="ghost" id="syncBtn">SYNC</button>
+        </div>
+      </div>
+      <div class="panel-body scroll" id="eventFeed"><div class="empty">Loading events&hellip;</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Agent Decision Center</h2>
+        <span id="decisionStatus"><span class="verdict RUNNING">IDLE</span></span>
+      </div>
+      <div class="panel-body scroll" id="decisionBody">
+        <div class="chain" id="chain"></div>
+        <div id="decisionDetail">
+          <div class="empty">Run an event from the simulator to watch the full<br/>
+            EVENT &rarr; QWEN &rarr; IMPACT &rarr; RISK &rarr; EXECUTION chain.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Simulate Event</h2>
+        <span class="badge" id="simState">READY</span>
+      </div>
+      <div class="panel-body scroll" id="templates"><div class="empty">Loading templates&hellip;</div></div>
+    </div>
+  </section>
+
+  <section class="grid-2">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Portfolio Value</h2>
+        <span class="badge" id="chartMeta">&mdash;</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap">
+          <svg class="chart" id="chart" preserveAspectRatio="none"></svg>
+          <div class="chart-tip" id="chartTip"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Positions</h2>
+        <span class="badge" id="posMeta">&mdash;</span>
+      </div>
+      <div class="panel-body scroll" style="max-height:280px;padding:0">
+        <table id="positions">
+          <thead><tr>
+            <th>Asset</th><th>Qty</th><th>Entry</th><th>Last</th>
+            <th>PnL</th><th>Weight</th><th>Conviction</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid-2">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Decision Timeline</h2>
+        <span class="badge" id="tlMeta">&mdash;</span>
+      </div>
+      <div class="panel-body scroll" id="timeline"><div class="empty">No decisions yet.</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Explainability</h2></div>
+      <div class="panel-body scroll">
+        <div id="explain"><div class="empty">Run an event to generate an explanation.</div></div>
+        <div class="section-label">Trade Blotter &middot; PAPER</div>
+        <table id="trades">
+          <thead><tr>
+            <th>Time</th><th>Side</th><th>Asset</th><th>Qty</th><th>Price</th><th>Notional</th><th>Risk</th>
+          </tr></thead>
+          <tbody><tr><td colspan="7" class="empty">No trades yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  EVENTRA &middot; autonomous event-driven agent &middot; PAPER TRADING ONLY &middot; no real orders are ever sent
+</footer>
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
