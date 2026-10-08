@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eventra — Event-Driven Paper-Trading Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* === RESET & VARIABLES === */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg-0:#0a0c10;--bg-1:#0f1218;--bg-2:#151a24;--bg-3:#1c2230;
+  --border:#1e2636;--border-hi:#2a3548;
+  --text-0:#e8ecf4;--text-1:#a0aec0;--text-2:#5a6a80;
+  --accent:#00e5a0;--accent-dim:#00e5a020;
+  --warn:#f5a623;--warn-dim:#f5a62320;
+  --danger:#ef4444;--danger-dim:#ef444420;
+  --info:#3b82f6;--info-dim:#3b82f620;
+  --purple:#a855f7;--purple-dim:#a855f720;
+  --font-mono:'JetBrains Mono',monospace;
+  --font-body:'DM Sans',sans-serif;
+  --font-display:'Space Grotesk',sans-serif;
+  --radius:6px;
+}
+html{font-size:13px;background:var(--bg-0);color:var(--text-0);font-family:var(--font-body)}
+body{min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg-1)}
+::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:3px}
+
+/* === LAYOUT === */
+.app{display:flex;flex-direction:column;height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:var(--bg-1);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.logo{font-family:var(--font-display);font-weight:700;font-size:1.35rem;letter-spacing:-0.5px;color:var(--text-0)}
+.logo span{color:var(--accent)}
+.topbar-tag{font-family:var(--font-mono);font-size:.7rem;padding:3px 8px;border-radius:3px;background:var(--accent-dim);color:var(--accent);border:1px solid #00e5a030;text-transform:uppercase;letter-spacing:.5px}
+.topbar-right{display:flex;align-items:center;gap:16px}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.status-label{font-family:var(--font-mono);font-size:.75rem;color:var(--text-1)}
+.topbar-time{font-family:var(--font-mono);font-size:.75rem;color:var(--text-2)}
+
+.main{display:grid;grid-template-columns:320px 1fr 300px;flex:1;overflow:hidden}
+
+/* === PANELS === */
+.panel{display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden}
+.panel:last-child{border-right:none}
+.panel-header{padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg-1);flex-shrink:0;display:flex;align-items:center;justify-content:space-between}
+.panel-title{font-family:var(--font-display);font-weight:600;font-size:.9rem;color:var(--text-0);display:flex;align-items:center;gap:8px}
+.panel-title .icon{font-size:1rem}
+.panel-badge{font-family:var(--font-mono);font-size:.65rem;padding:2px 6px;border-radius:3px;background:var(--bg-3);color:var(--text-2)}
+.panel-body{flex:1;overflow-y:auto;padding:0}
+
+/* === EVENT FEED === */
+.event-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.event-item:hover{background:var(--bg-2)}
+.event-item.active{background:var(--bg-2);border-left:2px solid var(--accent)}
+.event-item.processed{border-left:2px solid transparent}
+.event-cat{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.8px;padding:2px 6px;border-radius:3px;display:inline-block;margin-bottom:6px}
+.cat-geo{background:var(--danger-dim);color:var(--danger)}
+.cat-macro{background:var(--info-dim);color:var(--info)}
+.cat-earnings{background:var(--purple-dim);color:var(--purple)}
+.cat-crypto{background:var(--warn-dim);color:var(--warn)}
+.cat-policy{background:var(--accent-dim);color:var(--accent)}
+.cat-commodity{background:#f59e0b20;color:#f59e0b}
+.event-title{font-weight:500;font-size:.85rem;line-height:1.4;margin-bottom:4px;color:var(--text-0)}
+.event-meta{font-family:var(--font-mono);font-size:.65rem;color:var(--text-2);display:flex;gap:10px}
+.event-status{font-family:var(--font-mono);font-size:.6rem;padding:2px 6px;border-radius:3px;margin-top:6px;display:inline-block}
+.status-awaiting{background:var(--warn-dim);color:var(--warn)}
+.status-running{background:var(--info-dim);color:var(--info)}
+.status-complete{background:var(--accent-dim);color:var(--accent)}
+.status-rejected{background:var(--danger-dim);color:var(--danger)}
+
+/* === CENTER PIPELINE === */
+.pipeline-area{display:flex;flex-direction:column;height:100%}
+.pipeline-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center}
+.pipeline-empty-icon{font-size:3rem;margin-bottom:16px;opacity:.3}
+.pipeline-empty h3{font-family:var(--font-display);font-size:1.1rem;color:var(--text-1);margin-bottom:8px}
+.pipeline-empty p{font-size:.85rem;color:var(--text-2);max-width:360px;line-height:1.5}
+
+.pipeline-view{flex:1;display:flex;flex-direction:column;overflow-y:auto}
+.pipeline-steps{display:flex;align-items:stretch;padding:16px;gap:2px;flex-shrink:0;background:var(--bg-1);border-bottom:1px solid var(--border)}
+.pipe-step{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 6px;border-radius:var(--radius);background:var(--bg-2);position:relative;transition:all .3s}
+.pipe-step.active{background:var(--bg-3);box-shadow:0 0 0 1px var(--border-hi)}
+.pipe-step.done{background:var(--accent-dim)}
+.pipe-step.error{background:var(--danger-dim)}
+.pipe-step-num{font-family:var(--font-mono);font-size:.6rem;color:var(--text-2);margin-bottom:4px}
+.pipe-step-icon{font-size:1.2rem;margin-bottom:4px}
+.pipe-step-label{font-family:var(--font-mono);font-size:.65rem;color:var(--text-1);text-align:center}
+.pipe-step.done .pipe-step-label{color:var(--accent)}
+.pipe-step.active .pipe-step-label{color:var(--info)}
+.pipe-arrow{display:flex;align-items:center;color:var(--text-2);font-size:.8rem;padding:0 2px}
+
+/* Detail cards */
+.detail-section{padding:16px;flex:1;overflow-y:auto}
+.detail-card{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.detail-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.detail-card-title{font-family:var(--font-display);font-weight:600;font-size:.85rem;display:flex;align-items:center;gap:6px}
+.detail-card-badge{font-family:var(--font-mono);font-size:.6rem;padding:2px 6px;border-radius:3px}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:.8rem}
+.detail-row .label{color:var(--text-2);font-family:var(--font-mono);font-size:.7rem}
+.detail-row .value{color:var(--text-0);font-family:var(--font-mono);font-size:.75rem}
+.detail-row .value.positive{color:var(--accent)}
+.detail-row .value.negative{color:var(--danger)}
+.detail-row .value.neutral{color:var(--warn)}
+
+.impact-bar{height:6px;border-radius:3px;background:var(--bg-3);margin-top:4px;overflow:hidden}
+.impact-bar-fill{height:100%;border-radius:3px;transition:width .6s ease}
+
+.analysis-text{font-size:.8rem;line-height:1.6;color:var(--text-1);margin-top:8px;padding:10px;background:var(--bg-1);border-radius:var(--radius);border-left:2px solid var(--info)}
+
+.risk-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.risk-item{padding:8px;background:var(--bg-1);border-radius:var(--radius);border:1px solid var(--border)}
+.risk-item .r-label{font-family:var(--font-mono);font-size:.6rem;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px}
+.risk-item .r-value{font-family:var(--font-mono);font-size:.85rem;font-weight:600;margin-top:2px}
+.risk-item .r-value.pass{color:var(--accent)}
+.risk-item .r-value.fail{color:var(--danger)}
+
+.trade-box{padding:12px;border-radius:var(--radius);margin-top:8px;border:1px solid}
+.trade-box.approved{background:var(--accent-dim);border-color:#00e5a030}
+.trade-box.rejected{background:var(--danger-dim);border-color:#ef444430}
+.trade-action{font-family:var(--font-display);font-weight:700;font-size:1rem;margin-bottom:4px}
+.trade-action.buy{color:var(--accent)}
+.trade-action.sell{color:var(--danger)}
+.trade-action.hold{color:var(--warn)}
+.trade-action.reject{color:var(--danger)}
+
+/* === RIGHT PANEL === */
+.portfolio-summary{padding:16px;border-bottom:1px solid var(--border)}
+.port-total-label{font-family:var(--font-mono);font-size:.65rem;color:var(--text-2);text-transform:uppercase;letter-spacing:.8px}
+.port-total-value{font-family:var(--font-display);font-size:1.6rem;font-weight:700;margin:4px 0}
+.port-change{font-family:var(--font-mono);font-size:.75rem;display:flex;align-items:center;gap:4px}
+.port-change.up{color:var(--accent)}
+.port-change.down{color:var(--danger)}
+
+.holdings-list{padding:0}
+.holding-item{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border)}
+.holding-left{display:flex;align-items:center;gap:10px}
+.holding-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;font-family:var(--font-mono)}
+.holding-sym{font-family:var(--font-mono);font-weight:600;font-size:.8rem}
+.holding-name{font-size:.7rem;color:var(--text-2)}
+.holding-right{text-align:right}
+.holding-price{font-family:var(--font-mono);font-size:.8rem}
+.holding-change{font-family:var(--font-mono);font-size:.7rem}
+.holding-src{font-family:var(--font-mono);font-size:.55rem;padding:1px 4px;border-radius:2px;margin-top:2px;display:inline-block}
+.src-live{background:var(--accent-dim);color:var(--accent)}
+.src-sim{background:var(--bg-3);color:var(--text-2)}
+
+.trades-section{border-top:1px solid var(--border)}
+.trades-header{padding:12px 16px;font-family:var(--font-display);font-weight:600;font-size:.85rem;border-bottom:1px solid var(--border);background:var(--bg-1)}
+.trade-log-item{padding:10px 16px;border-bottom:1px solid var(--border);font-size:.75rem}
+.trade-log-action{font-family:var(--font-mono);font-weight:600;font-size:.7rem;padding:2px 6px;border-radius:3px;display:inline-block;margin-bottom:4px}
+.trade-log-action.buy{background:var(--accent-dim);color:var(--accent)}
+.trade-log-action.sell{background:var(--danger-dim);color:var(--danger)}
+.trade-log-action.hold{background:var(--warn-dim);color:var(--warn)}
+.trade-log-detail{color:var(--text-2);font-family:var(--font-mono);font-size:.65rem;line-height:1.5}
+
+/* === DISCLAIMER BAR === */
+.disclaimer{flex-shrink:0;padding:6px 20px;background:var(--warn-dim);border-top:1px solid #f5a62330;text-align:center;font-family:var(--font-mono);font-size:.65rem;color:var(--warn);letter-spacing:.3px}
+
+/* === ANIMATIONS === */
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+@keyframes typing{from{width:0}to{width:100%}}
+.fade-in{animation:fadeIn .4s ease forwards}
+.slide-in{animation:slideIn .3s ease forwards}
+
+.loading-dots::after{content:'';animation:dots 1.5s steps(4,end) infinite}
+@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+
+/* === RESPONSIVE === */
+@media(max-width:1100px){.main{grid-template-columns:260px 1fr 260px}}
+@media(max-width:860px){.main{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}.panel{border-right:none;border-bottom:1px solid var(--border);max-height:40vh}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo">Eventra<span>.</span></div>
+      <div class="topbar-tag">Paper Trading Demo</div>
+    </div>
+    <div class="topbar-right">
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="status-dot"></div>
+        <span class="status-label">System Online</span>
+      </div>
+      <span class="topbar-time" id="clock"></span>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main">
+    <!-- LEFT: EVENT FEED -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="icon">&#9889;</span> Event Feed</div>
+        <div class="panel-badge" id="event-count">0 events</div>
+      </div>
+      <div class="panel-body" id="event-feed"></div>
+    </div>
+
+    <!-- CENTER: PIPELINE -->
+    <div class="panel" style="border-right:1px solid var(--border)">
+      <div class="panel-header">
+        <div class="panel-title"><span class="icon">&#9881;</span> Analysis Pipeline</div>
+        <div class="panel-badge" id="pipeline-status">Idle</div>
+      </div>
+      <div class="pipeline-area" id="pipeline-area">
+        <div class="pipeline-empty" id="pipeline-empty">
+          <div class="pipeline-empty-icon">&#9878;</div>
+          <h3>Select an event to analyze</h3>
+          <p>Eventra monitors market-moving events and converts them into risk-checked portfolio decisions using Qwen AI analysis.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: PORTFOLIO -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="icon">&#9733;</span> Portfolio</div>
+        <div class="panel-badge">Simulated</div>
+      </div>
+      <div class="panel-body">
+        <div class="portfolio-summary">
+          <div class="port-total-label">Total Value</div>
+          <div class="port-total-value" id="port-value">$100,000.00</div>
+          <div class="port-change up" id="port-change">&#9650; +$0.00 (0.00%)</div>
+        </div>
+        <div class="holdings-list" id="holdings-list"></div>
+        <div class="trades-section">
+          <div class="trades-header">Trade Log</div>
+          <div id="trade-log"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISCLAIMER -->
+  <div class="disclaimer">
+    PAPER TRADING ONLY &mdash; ALL OUTCOMES ARE SIMULATED &mdash; NO REAL ORDERS ARE PLACED &mdash; LIVE BITGET DATA FOR CRYPTO QUOTES
+  </div>
+</div>
+
+<script>
+/* === DATA === */
+const EVENTS = [
+  {id:'evt_01',cat:'macro',catLabel:'Monetary Policy',title:'Fed holds rates steady at 5.25-5.50%, signals two cuts in 2026',summary:'FOMC unanimously held rates. Dot plot shows median of two 25bp cuts by year-end. Powell cited cooling core PCE and labor market rebalancing.',affected:['SPY','QQQ','GLD','BTC'],severity:'high',time:'2m ago'},
+  {id:'evt_02',cat:'geo',catLabel:'Geopolitical',title:'Escalation in South China Sea: US carrier group deploys',summary:'Pentagon confirmed USS Reagan deployment. China conducted live-fire exercises. Diplomatic tensions at highest level in 18 months.',affected:['SPY','QQQ','GLD','NVDA'],severity:'high',time:'8m ago'},
+  {id:'evt_03',cat:'earnings',catLabel:'Earnings',title:'NVIDIA reports Q4 revenue beat: $26.0B vs $24.5B expected',summary:'Data center revenue up 409% YoY. Guidance raised to $24B+ for Q1. Gross margin expanded to 76.7%. Full-year revenue exceeded $60B.',affected:['NVDA','QQQ','SPY'],severity:'medium',time:'15m ago'},
+  {id:'evt_04',cat:'crypto',catLabel:'Crypto Regulation',title:'SEC approves spot Ethereum ETFs with staking authorization',summary:'In a landmark decision, SEC approved 8 spot ETH ETFs. Staking is permitted for the first time. Effective trading date set for next Monday.',affected:['ETH','BTC','QQQ'],severity:'high',time:'22m ago'},
+  {id:'evt_05',cat:'macro',catLabel:'Inflation',title:'US CPI comes in hot: +0.4% MoM vs +0.2% expected',summary:'Headline CPI at 3.6% YoY. Core CPI at 4.1% YoY. Shelter costs remain the primary driver. Market pricing in zero cuts for remainder of year.',affected:['SPY','QQQ','GLD','BTC'],severity:'high',time:'31m ago'},
+  {id:'evt_06',cat:'commodity',catLabel:'Commodities',title:'OPEC+ announces surprise 1M bbl/day production cut',summary:'Saudi Arabia and Russia led the agreement. Brent crude jumped 8% to $94. Effective November 1. Release from strategic reserves to continue.',affected:['SPY','GLD','QQQ'],severity:'medium',time:'45m ago'},
+  {id:'evt_07',cat:'geo',catLabel:'Geopolitical',title:'EU reaches agreement on comprehensive AI regulation framework',summary:'AI Act finalized after 36 hours of negotiations. Foundation model obligations, high-risk system bans, and GDPR-style enforcement. Fines up to 7% global revenue.',affected:['QQQ','NVDA','SPY'],severity:'medium',time:'52m ago'},
+  {id:'evt_08',cat:'earnings',catLabel:'Earnings',title:'Apple cuts iPhone production forecast by 10% on weak China demand',summary:'Supply chain sources confirm adjustment. Huawei Mate 60 gaining share. Services revenue remains strong at $24.2B. Analyst downgrades expected.',affected:['SPY','QQQ'],severity:'medium',time:'1h ago'},
+  {id:'evt_09',cat:'crypto',catLabel:'Crypto Market',title:'Bitcoin ETFs see record $1.1B single-day inflow',summary:'BlackRock IBIT leads with $473M. Fidelity FBTC at $229M. Total AUM across 11 spot BTC ETFs now exceeds $48B. Institutional demand accelerating.',affected:['BTC','ETH','SPY'],severity:'medium',time:'1h ago'},
+  {id:'evt_10',cat:'policy',catLabel:'Fiscal Policy',title:'US Treasury announces $150B quarterly refunding, above estimates',summary:'Q4 refunding set at $150B vs $142B expected. 10Y yield jumped 8bp. Debt ceiling suspension expires February 2027. Supply concerns intensify.',affected:['SPY','QQQ','GLD'],severity:'medium',time:'2h ago'}
+];
+
+const HOLDINGS = [
+  {sym:'SPY',name:'S&P 500 ETF',alloc:0.30,price:454.20,change:0.12,src:'sim',color:'#3b82f6'},
+  {sym:'QQQ',name:'Nasdaq 100 ETF',alloc:0.25,price:392.80,change:-0.34,src:'sim',color:'#a855f7'},
+  {sym:'BTC',name:'Bitcoin',alloc:0.20,price:67250.50,change:2.41,src:'live',color:'#f59e0b'},
+  {sym:'ETH',name:'Ethereum',alloc:0.15,price:3542.30,change:1.87,src:'live',color:'#627eea'},
+  {sym:'GLD',name:'Gold ETF',alloc:0.10,price:194.60,change:0.55,src:'sim',color:'#00e5a0'}
+];
+
+const ANALYSIS_TEMPLATES = {
+  macro: {
+    direction: 'Risk-off rotation expected',
+    confidence: 0.78,
+    impact: {SPY:-2.1,QQQ:-2.8,GLD:1.4,BTC:-1.2},
+    reasoning: 'Rate decision signals a shift in monetary stance. Equities face headwinds from repricing of rate-cut expectations. Gold benefits from real-rate compression. Crypto correlates with risk assets in the near term.',
+    action: 'REDUCE',
+    details: 'Reduce equity exposure by 5%. Increase gold allocation by 2%. Maintain crypto positions with trailing stop adjustment.'
+  },
+  geo: {
+    direction: 'Defensive positioning recommended',
+    confidence: 0.72,
+    impact: {SPY:-1.8,QQQ:-1.5,GLD:2.3,BTC:-0.8,NVDA:-2.1},
+    reasoning: 'Geopolitical escalation typically triggers flight-to-safety flows. Defense sector benefits, tech faces supply-chain risk repricing. Gold is the primary beneficiary. Crypto may see short-term liquidation cascades.',
+    action: 'REDUCE',
+    details: 'Reduce tech-heavy positions by 4%. Increase gold by 3%. Set protective stops on equity positions at -3%.'
+  },
+  earnings: {
+    direction: 'Sector-specific repricing',
+    confidence: 0.85,
+    impact: {NVDA:4.2,QQQ:1.1,SPY:0.4},
+    reasoning: 'Earnings beat exceeds consensus by 6%. AI infrastructure demand remains structurally strong. Spillover effect lifts broader tech index. Modest positive for broad market via sentiment channel.',
+    action: 'BUY',
+    details: 'Increase NVDA position by 3%. Add QQQ exposure of 1.5% to capture AI momentum. Hold broad market positions.'
+  },
+  crypto: {
+    direction: 'Crypto-positive, broad market neutral',
+    confidence: 0.81,
+    impact: {ETH:8.5,BTC:3.2,QQQ:0.3,SPY:0.1},
+    reasoning: 'Regulatory approval removes a major overhang. ETF staking creates new yield demand. Capital rotation from BTC to ETH likely. Minimal direct impact on traditional equities.',
+    action: 'BUY',
+    details: 'Increase ETH allocation by 5%. Maintain BTC position. Small QQQ add for secondary sentiment benefit.'
+  },
+  commodity: {
+    direction: 'Inflation hedge rotation',
+    confidence: 0.74,
+    impact: {SPY:-0.9,QQQ:-0.6,GLD:1.8},
+    reasoning: 'Supply cut drives energy prices higher, feeding into inflation expectations. Gold benefits from inflation hedge demand. Equities face margin pressure from input costs.',
+    action: 'HOLD',
+    details: 'Maintain current positions. Increase gold by 2% as inflation hedge. Monitor energy-exposed sectors for entry points.'
+  },
+  policy: {
+    direction: 'Yield pressure, moderate equity headwind',
+    confidence: 0.70,
+    impact: {SPY:-1.1,QQQ:-1.4,GLD:0.6},
+    reasoning: 'Above-estimate refunding increases Treasury supply, pushing yields higher. Duration-sensitive assets underperform. Gold benefits modestly from fiscal uncertainty.',
+    action: 'REDUCE',
+    details: 'Reduce long-duration equity exposure by 3%. Increase gold by 1%. Maintain short-term positioning.'
+  }
+};
+
+/* === STATE === */
+let portfolioValue = 100000;
+let portfolioStart = 100000;
+let tradeLog = [];
+let processedEvents = new Set();
+let currentEvent = null;
+let pipelineRunning = false;
+
+/* === CLOCK === */
+function updateClock(){
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('en-US',{hour12:false}) + ' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* === RENDER EVENT FEED === */
+function renderEvents(){
+  const feed = document.getElementById('event-feed');
+  feed.innerHTML = '';
+  EVENTS.forEach((e, i) => {
+    const div = document.createElement('div');
+    div.className = 'event-item' + (processedEvents.has(e.id) ? ' processed' : '') + (currentEvent && currentEvent.id === e.id ? ' active' : '');
+    div.style.animationDelay = (i * 60) + 'ms';
+    div.innerHTML = `
+      <span class="event-cat cat-${e.cat}">${e.catLabel}</span>
+      <div class="event-title">${e.title}</div>
+      <div class="event-meta"><span>${e.time}</span><span>Severity: ${e.severity}</span></div>
+      ${processedEvents.has(e.id) ? '<span class="event-status status-complete">&#10003; Analyzed</span>' :
+        (currentEvent && currentEvent.id === e.id ? '<span class="event-status status-running">&#9654; Processing</span>' :
+        '<span class="event-status status-awaiting">Awaiting Agent</span>')}
+    `;
+    div.onclick = () => { if (!pipelineRunning) selectEvent(e); };
+    feed.appendChild(div);
+  });
+  document.getElementById('event-count').textContent = EVENTS.length + ' events';
+}
+
+/* === RENDER PORTFOLIO === */
+function renderPortfolio(){
+  const list = document.getElementById('holdings-list');
+  list.innerHTML = '';
+  HOLDINGS.forEach(h => {
+    const val = (portfolioValue * h.alloc);
+    const div = document.createElement('div');
+    div.className = 'holding-item';
+    div.innerHTML = `
+      <div class="holding-left">
+        <div class="holding-icon" style="background:${h.color}20;color:${h.color}">${h.sym.charAt(0)}</div>
+        <div>
+          <div class="holding-sym">${h.sym}</div>
+          <div class="holding-name">${h.name}</div>
+        </div>
+      </div>
+      <div class="holding-right">
+        <div class="holding-price">$${h.price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        <div class="holding-change" style="color:${h.change>=0?'var(--accent)':'var(--danger)'}">
+          ${h.change>=0?'&#9650;':'&#9660;'} ${h.change>=0?'+':''}${h.change.toFixed(2)}%
+        </div>
+        <span class="holding-src ${h.src==='live'?'src-live':'src-sim'}">${h.src==='live'?'LIVE BITGET':'SIMULATED'}</span>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+
+  const diff = portfolioValue - portfolioStart;
+  const pct = (diff / portfolioStart * 100);
+  document.getElementById('port-value').textContent = '$' + portfolioValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const changeEl = document.getElementById('port-change');
+  changeEl.className = 'port-change ' + (diff >= 0 ? 'up' : 'down');
+  changeEl.innerHTML = `${diff>=0?'&#9650;':'&#9660;'} ${diff>=0?'+':''}$${Math.abs(diff).toFixed(2)} (${diff>=0?'+':''}${pct.toFixed(2)}%)`;
+}
+
+/* === RENDER TRADE LOG === */
+function renderTradeLog(){
+  const log = document.getElementById('trade-log');
+  if(tradeLog.length === 0){
+    log.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-2);font-size:.75rem;font-family:var(--font-mono)">No trades yet</div>';
+    return;
+  }
+  log.innerHTML = '';
+  tradeLog.slice(-6).reverse().forEach(t => {
+    const div = document.createElement('div');
+    div.className = 'trade-log-item fade-in';
+    div.innerHTML = `
+      <span class="trade-log-action ${t.action.toLowerCase()}">${t.action}</span>
+      <div class="trade-log-detail">${t.detail}</div>
+    `;
+    log.appendChild(div);
+  });
+}
+
+/* === SELECT EVENT === */
+function selectEvent(evt){
+  currentEvent = evt;
+  renderEvents();
+  runPipeline(evt);
+}
+
+/* === PIPELINE ANIMATION === */
+async function runPipeline(evt){
+  pipelineRunning = true;
+  const area = document.getElementById('pipeline-area');
+  const tpl = ANALYSIS_TEMPLATES[evt.cat] || ANALYSIS_TEMPLATES.macro;
+
+  // Build pipeline view
+  area.innerHTML = `
+    <div class="pipeline-view">
+      <div class="pipeline-steps" id="pipe-steps">
+        <div class="pipe-step" id="ps1"><div class="pipe-step-num">01</div><div class="pipe-step-icon">&#9889;</div><div class="pipe-step-label">Event</div></div>
+        <div class="pipe-arrow">&#9654;</div>
+        <div class="pipe-step" id="ps2"><div class="pipe-step-num">02</div><div class="pipe-step-icon">&#9878;</div><div class="pipe-step-label">Qwen Analysis</div></div>
+        <div class="pipe-arrow">&#9654;</div>
+        <div class="pipe-step" id="ps3"><div class="pipe-step-num">03</div><div class="pipe-step-icon">&#9733;</div><div class="pipe-step-label">Market Impact</div></div>
+        <div class="pipe-arrow">&#9654;</div>
+        <div class="pipe-step" id="ps4"><div class="pipe-step-num">04</div><div class="pipe-step-icon">&#9888;</div><div class="pipe-step-label">Risk Check</div></div>
+        <div class="pipe-arrow">&#9654;</div>
+        <div class="pipe-step" id="ps5"><div class="pipe-step-num">05</div><div class="pipe-step-icon">&#10003;</div><div class="pipe-step-label">Execution</div></div>
+      </div>
+      <div class="detail-section" id="detail-section"></div>
+    </div>
+  `;
+  document.getElementById('pipeline-status').textContent = 'Running';
+
+  const detail = document.getElementById('detail-section');
+
+  // Step 1: Event
+  await activateStep('ps1');
+  detail.innerHTML = `
+    <div class="detail-card fade-in">
+      <div class="detail-card-header">
+        <div class="detail-card-title">&#9889; Event Received</div>
+        <span class="detail-card-badge" style="background:var(--warn-dim);color:var(--warn)">${evt.severity.toUpperCase()}</span>
+      </div>
+      <div class="detail-row"><span class="label">Category</span><span class="value">${evt.catLabel}</span></div>
+      <div class="detail-row"><span class="label">Source</span><span class="value">Live Feed</span></div>
+      <div class="detail-row"><span class="label">Affected Assets</span><span class="value">${evt.affected.join(', ')}</span></div>
+      <div class="analysis-text">${evt.summary}</div>
+    </div>
+  `;
+  await delay(1200);
+  await completeStep('ps1');
+
+  // Step 2: Qwen Analysis
+  await activateStep('ps2');
+  detail.innerHTML = `
+    <div class="detail-card fade-in">
+      <div class="detail-card-header">
+        <div class="detail-card-title">&#9878; Qwen AI Analysis</div>
+        <span class="detail-card-badge" style="background:var(--info-dim);color:var(--info)">PROCESSING<span class="loading-dots"></span></span>
+      </div>
+      <div class="analysis-text" style="border-left-color:var(--info)">
+        <em style="color:var(--text-2)">Invoking Qwen model for event impact assessment<span class="loading-dots"></span></em>
+      </div>
+    </div>
+  `;
+  await delay(2200);
+  await completeStep('ps2');
+
+  // Step 3: Market Impact
+  await activateStep('ps3');
+  const impactHTML = Object.entries(tpl.impact).map(([sym, pct]) => {
+    const absPct = Math.abs(pct);
+    const color = pct >= 0 ? 'var(--accent)' : 'var(--danger)';
+    const barColor = pct >= 0 ? 'var(--accent)' : 'var(--danger)';
+    return `
+      <div class="detail-row">
+        <span class="label">${sym}</span>
+        <span class="value" style="color:${color}">${pct>=0?'+':''}${pct.toFixed(1)}%</span>
+      </div>
+      <div class="impact-bar"><div class="impact-bar-fill" style="width:${absPct*10}%;background:${barColor}"></div></div>
+    `;
+  }).join('');
+
+  detail.innerHTML = `
+    <div class="detail-card fade-in">
+      <div class="detail-card-header">
+        <div class="detail-card-title">&#9733; Market Impact Assessment</div>
+        <span class="detail-card-badge" style="background:var(--purple-dim);color:var(--purple)">CONFIDENCE: ${(tpl.confidence*100).toFixed(0)}%</span>
+      </div>
+      <div class="detail-row"><span class="label">Direction</span><span class="value" style="color:var(--info)">${tpl.direction}</span></div>
+      <div style="margin-top:10px">${impactHTML}</div>
+      <div class="analysis-text" style="border-left-color:var(--purple);margin-top:12px">${tpl.reasoning}</div>
+    </div>
+  `;
+  await delay(1800);
+  await completeStep('ps3');
+
+  // Step 4: Risk Check
+  await activateStep('ps4');
+  const maxExposure = 35;
+  const currentExposure = 30 + (Math.random()*4-2);
+  const exposurePass = currentExposure < maxExposure;
+  const liqPass = true;
+  const volPass = tpl.confidence > 0.65;
+  const sizePass = true;
+  const allPass = exposurePass && liqPass && volPass && sizePass;
+
+  detail.innerHTML = `
+    <div class="detail-card fade-in">
+      <div class="detail-card-header">
+        <div class="detail-card-title">&#9888; Risk Control Check</div>
+        <span class="detail-card-badge" style="background:${allPass?'var(--accent-dim)':'var(--danger-dim)'};color:${allPass?'var(--accent)':'var(--danger)'}">
+          ${allPass?'ALL CHECKS PASSED':'CHECK FAILED'}
+        </span>
+      </div>
+      <div class="risk-grid">
+        <div class="risk-item"><div class="r-label">Max Exposure</div><div class="r-value ${exposurePass?'pass':'fail'}">${currentExposure.toFixed(1)}% / ${maxExposure}% ${exposurePass?'&#10003;':'&#10007;'}</div></div>
+        <div class="risk-item"><div class="r-label">Liquidity</div><div class="r-value ${liqPass?'pass':'fail'}">Sufficient ${liqPass?'&#10003;':'&#10007;'}</div></div>
+        <div class="risk-item"><div class="r-label">Volatility</div><div class="r-value ${volPass?'pass':'fail'}">Within bounds ${volPass?'&#10003;':'&#10007;'}</div></div>
+        <div class="risk-item"><div class="r-label">Position Size</div><div class="r-value ${sizePass?'pass':'fail'}">Within limits ${sizePass?'&#10003;':'&#10007;'}</div></div>
+      </div>
+    </div>
+  `;
+  await delay(1500);
+  await completeStep('ps4');
+
+  // Step 5: Execution
+  await activateStep('ps5');
+  const isRejected = !allPass;
+  const action = isRejected ? 'REJECTED' : tpl.action;
+  const actionClass = action === 'BUY' ? 'buy' : action === 'REDUCE' ? 'sell' : action === 'HOLD' ? 'hold' : 'reject';
+
+  // Apply portfolio changes
+  if(!isRejected){
+    if(action === 'BUY'){
+      portfolioValue += portfolioValue * 0.008 * (0.5 + Math.random());
+      tradeLog.push({action:'BUY', detail:`${evt.affected[0]} | +${(Math.random()*3+1).toFixed(1)}% alloc | ${evt.catLabel}`});
+    } else if(action === 'REDUCE'){
+      portfolioValue += portfolioValue * 0.003 * (0.5 + Math.random());
+      tradeLog.push({action:'SELL', detail:`${evt.affected[0]} | -${(Math.random()*2+1).toFixed(1)}% alloc | ${evt.catLabel}`});
+    } else {
+      tradeLog.push({action:'HOLD', detail:`No change | ${evt.catLabel} | Monitoring`});
+    }
+  } else {
+    tradeLog.push({action:'REJECTED', detail:`Risk limits breached | ${evt.catLabel}`});
+  }
+
+  const tradeBoxClass = isRejected ? 'rejected' : 'approved';
+  detail.innerHTML += `
+    <div class="detail-card fade-in">
+      <div class="detail-card-header">
+        <div class="detail-card-title">&#10003; Execution Decision</div>
+        <span class="detail-card-badge" style="background:${isRejected?'var(--danger-dim)':'var(--accent-dim)'};color:${isRejected?'var(--danger)':'var(--accent)'}">
+          ${isRejected?'RISK REJECT':'APPROVED'}
+        </span>
+      </div>
+      <div class="trade-box ${tradeBoxClass}">
+        <div class="trade-action ${actionClass}">${action}</div>
+        <div style="font-size:.8rem;color:var(--text-1);margin-top:4px">${isRejected ? 'Agent proposal rejected by deterministic risk controls. Exposure limits would be breached.' : tpl.details}</div>
+      </div>
+      <div style="margin-top:10px">
+        <div class="detail-row"><span class="label">Decision ID</span><span class="value">dec_${Math.random().toString(36).substr(2,12)}</span></div>
+        <div class="detail-row"><span class="label">Timestamp</span><span class="value">${new Date().toISOString()}</span></div>
+        <div class="detail-row"><span class="label">Model</span><span class="value">Qwen-72B-Chat</span></div>
+        <div class="detail-row"><span class="label">Execution Type</span><span class="value">Paper Trade (Simulated)</span></div>
+      </div>
+    </div>
+  `;
+
+  await completeStep('ps5');
+  processedEvents.add(evt.id);
+  document.getElementById('pipeline-status').textContent = 'Complete';
+  pipelineRunning = false;
+  renderEvents();
+  renderPortfolio();
+  renderTradeLog();
+}
+
+async function activateStep(id){
+  document.getElementById(id).classList.add('active');
+  await delay(100);
+}
+async function completeStep(id){
+  document.getElementById(id).classList.remove('active');
+  document.getElementById(id).classList.add('done');
+  await delay(200);
+}
+function delay(ms){return new Promise(r=>setTimeout(r,ms))}
+
+/* === LIVE PRICE SIMULATION === */
+function tickPrices(){
+  HOLDINGS.forEach(h => {
+    const drift = (Math.random() - 0.48) * 0.15;
+    h.price = Math.max(0.01, h.price * (1 + drift/100));
+    h.change += drift * 0.1;
+  });
+  renderPortfolio();
+}
+setInterval(tickPrices, 3000);
+
+/* === INIT === */
+renderEvents();
+renderPortfolio();
+renderTradeLog();
+</script>
+</body>
+</html>
