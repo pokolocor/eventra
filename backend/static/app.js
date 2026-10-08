@@ -610,8 +610,20 @@ $("#killSwitch").addEventListener("click", async () => {
 
 $("#resetBtn").addEventListener("click", async () => {
   if (!window.confirm("Reset the simulated portfolio, events and decision history?")) return;
+
+  const token = window.prompt("Enter the admin token:");
+  if (!token) return;
+
   try {
-    await api("/api/system/reset", { method: "POST", body: "{}" });
+    await api("/api/system/reset", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Token": token,
+      },
+      body: "{}",
+    });
+
     state.activeDecision = null;
     renderChainShell();
     $("#decisionDetail").innerHTML = "";
@@ -619,7 +631,9 @@ $("#resetBtn").addEventListener("click", async () => {
     $("#explain").innerHTML = `<div class="empty">Run an event to generate an explanation.</div>`;
     await Promise.all([refreshStatus(), refreshPortfolio(), refreshEvents(), refreshDecisions()]);
     toast("Demo state reset.", "ok");
-  } catch (err) { toast("Reset failed: " + err.message, "err"); }
+  } catch (err) {
+    toast("Reset failed: " + err.message, "err");
+  }
 });
 
 $("#syncBtn").addEventListener("click", async () => {
