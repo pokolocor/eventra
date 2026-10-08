@@ -1,18 +1,13 @@
-"""Eventra FastAPI application.
-
-    uvicorn backend.main:app --reload --port 8000
-
-If FastAPI/uvicorn are not installed, `python backend/run.py` automatically
-falls back to the standard-library dev server (`backend/dev_server.py`), which
-exposes the identical JSON contract.
-"""
+"""Eventra FastAPI application."""
 
 from __future__ import annotations
 
+import logging
+import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,6 +19,12 @@ from backend.api.routes_portfolio import router as portfolio_router
 from backend.api.routes_system import router as system_router
 from backend.services.registry import get_registry
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 STATIC_DIR = BACKEND_DIR / "static"
 
 
@@ -33,6 +34,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     result = registry.bootstrap()
     app.state.registry = registry
     app.state.bootstrap = result
+
+    logger.info(
+        f"Eventra started | mode={'demo' if settings.demo_mode else 'production'} | "
+        f"llm={'qwen' if settings.qwen_available else 'demo-mock'} | "
+        f"db={settings.database_url}"
+    )
+
     yield
 
 
@@ -42,6 +50,16 @@ app = FastAPI(
     version=settings.version,
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,6 +84,7 @@ def api_index() -> Dict[str, Any]:
         "mode": "PAPER / DEMO" if settings.demo_mode else "PAPER",
         "endpoints": [
             "GET  /api/health",
+            "GET  /api/ready",
             "GET  /api/system/status",
             "POST /api/system/kill-switch",
             "POST /api/system/reset",
@@ -90,8 +109,20 @@ def api_index() -> Dict[str, Any]:
 
 
 @app.exception_handler(Exception)
-async def unhandled(_request: Any, exc: Exception) -> JSONResponse:
-    return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
+async def unhandled(request: Request, exc: Exception) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.error(f"Unhandled exception: {type(exc).__name__}: {exc}")
+
+    if settings.demo_mode:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"{type(exc).__name__}: {exc}", "request_id": request_id}
+        )
+    else:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error", "request_id": request_id}
+        )
 
 
 if STATIC_DIR.exists():

@@ -8,37 +8,51 @@ import type {
   Trade,
 } from "./types";
 
-/**
- * The browser only ever talks to the Eventra API through same-origin `/api/*`,
- * which Next.js rewrites to the Python backend (see next.config.mjs).
- * No secrets are exposed to the client.
- */
-const BASE = "https://eventra-1-9ltz.onrender.com";
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    cache: "no-store",
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
-  const text = await res.text();
-  let data: unknown = null;
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { detail: text };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      ...init,
+      signal: controller.signal,
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    clearTimeout(timeoutId);
+
+    const text = await res.text();
+    let data: unknown = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text };
+      }
     }
+
+    if (!res.ok) {
+      const detail = (data as { detail?: string } | null)?.detail ?? res.statusText;
+      throw new Error(detail);
+    }
+
+    return data as T;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Request timed out");
+    }
+    throw error;
   }
-  if (!res.ok) {
-    const detail = (data as { detail?: string } | null)?.detail ?? res.statusText;
-    throw new Error(detail);
-  }
-  return data as T;
 }
 
 export const api = {
   status: () => request<SystemStatus>("/api/system/status"),
   health: () => request<{ status: string; mode: string }>("/api/health"),
+  ready: () => request<{ status: string; database: string; llm: string }>("/api/ready"),
   portfolio: () => request<PortfolioView>("/api/portfolio"),
   history: (limit = 240) => request<EquityPoint[]>(`/api/portfolio/history?limit=${limit}`),
   trades: (limit = 40) => request<Trade[]>(`/api/portfolio/trades?limit=${limit}`),

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.api import handlers
-from backend.api.deps import registry
+from backend.api.deps import admin_principal, registry
 from backend.schemas.api import IngestEventRequest
+from backend.security import Principal
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
@@ -19,14 +20,18 @@ def get_events(limit: int = Query(40, ge=1, le=200)) -> List[Dict[str, Any]]:
 
 
 @router.post("/sync", response_model=None)
-def post_sync(limit: int = Query(40, ge=1, le=200)) -> Dict[str, Any]:
-    return handlers.sync_events(registry(), limit=limit)
+def post_sync(
+    limit: int = Query(40, ge=1, le=200), principal: Principal = Depends(admin_principal)
+) -> Dict[str, Any]:
+    return handlers.sync_events(registry(), limit=limit, principal=principal)
 
 
 @router.post("", response_model=None, status_code=201)
-def post_event(payload: IngestEventRequest) -> Dict[str, Any]:
+def post_event(
+    payload: IngestEventRequest, principal: Principal = Depends(admin_principal)
+) -> Dict[str, Any]:
     data = payload.model_dump(mode="json", exclude_none=True)
-    return handlers.run_event_payload(registry(), data)
+    return handlers.run_event_payload(registry(), data, principal=principal)
 
 
 @router.get("/templates", response_model=None)

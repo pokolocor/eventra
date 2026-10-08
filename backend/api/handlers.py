@@ -10,7 +10,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from backend.models.domain import DecisionRun, Event
+from backend.observability import get_logger
+from backend.security import Principal, anonymous, require_reset_allowed
 from backend.services.registry import ServiceRegistry
+
+logger = get_logger("api")
 
 
 def _jsonable(value: Any) -> Any:
@@ -80,16 +84,113 @@ def system_status(registry: ServiceRegistry) -> Dict[str, Any]:
             },
         }
     )
+    # Reflect the store actually in use, not just what configuration asked for.
+    status.setdefault("database", {})
+    status["database"]["backend"] = registry.repository.kind
+    status["database"]["persistent"] = registry.repository.persistent
     return status
 
 
-def set_kill_switch(registry: ServiceRegistry, engaged: bool) -> Dict[str, Any]:
-    registry.repository.set_kill_switch(bool(engaged))
-    return {"kill_switch": registry.repository.get_kill_switch()}
+def readiness(registry: ServiceRegistry) -> Dict[str, Any]:
+    """Readiness probe: can this process serve traffic right now?
+
+    Deliberately does *not* require a configured LLM - `demo-mock` is a
+    supported production path for the demo - but it does require the store.
+    """
+
+    checks: Dict[str, Any] = {}
+
+    try:
+        registry.repository.load_system()
+        checks["store"] = {
+            "status": "ok",
+            "kind": registry.repository.kind,
+            "persistent": registry.repository.persistent,
+        }
+        store_ready = True
+    except Exception as exc:  # pragma: no cover - depends on the live database
+        checks["store"] = {"status": "error", "error_type": type(exc).__name__}
+        store_ready = False
+
+    settings = registry.settings
+    checks["llm"] = {
+        "status": "ok",
+        "provider": "qwen" if settings.qwen_available else "demo-mock",
+        "configured": settings.qwen_available,
+        "model": settings.qwen_model,
+    }
+
+    ready = store_ready
+    return {
+        "status": "ready" if ready else "unavailable",
+        "ready": ready,
+        "app": settings.app_name,
+        "version": settings.version,
+        "environment": settings.environment,
+        "mode": "PAPER / DEMO" if settings.demo_mode else "PAPER",
+        "paper_trading_only": settings.paper_trading_only,
+        "kill_switch": registry.repository.get_kill_switch(),
+        "checks": checks,
+    }
 
 
-def reset_demo(registry: ServiceRegistry) -> Dict[str, Any]:
+def _log_control(
+    principal: Optional[Principal],
+    action: str,
+    detail: str = "",
+    outcome: str = "ok",
+) -> None:
+    """Structured log line for a control-plane action."""
+
+    who = principal or anonymous()
+    logger.info(
+        "control action",
+        extra={
+            "request_id": who.request_id,
+            "extra_fields": {
+                "action": action,
+                "actor": who.actor,
+                "ip": who.ip,
+                "outcome": outcome,
+                "detail": detail[:200],
+            },
+        },
+    )
+
+
+def _audit_control(
+    registry: ServiceRegistry,
+    principal: Optional[Principal],
+    action: str,
+    detail: str = "",
+    outcome: str = "ok",
+) -> None:
+    """Persist a control-plane action (actor + IP + timestamp) and log it."""
+
+    who = principal or anonymous()
+    registry.repository.audit(who.actor, action, detail, ip=who.ip)
+    _log_control(who, action, detail, outcome)
+
+
+def set_kill_switch(
+    registry: ServiceRegistry, engaged: bool, principal: Optional[Principal] = None
+) -> Dict[str, Any]:
+    who = principal or anonymous()
+    registry.guard.check_control(who.ip, "kill-switch")
+    registry.repository.set_kill_switch(bool(engaged), actor=who.actor, ip=who.ip)
+    engaged_now = registry.repository.get_kill_switch()
+    # `set_kill_switch` already persisted the audit row (with actor + IP).
+    _log_control(who, "kill_switch", "engaged" if engaged_now else "disengaged")
+    return {"kill_switch": engaged_now}
+
+
+def reset_demo(registry: ServiceRegistry, principal: Optional[Principal] = None) -> Dict[str, Any]:
+    who = principal or anonymous()
+    require_reset_allowed(registry.settings)
+    registry.guard.check_control(who.ip, "reset")
     result = registry.reset()
+    registry.guard.reset()
+    _audit_control(registry, who, "system_reset", f"seeded={result.get('seeded')}")
     return {"ok": True, **result}
 
 
@@ -134,27 +235,81 @@ def list_events(registry: ServiceRegistry, limit: int = 40) -> List[Dict[str, An
     return payload
 
 
-def sync_events(registry: ServiceRegistry, limit: int = 40) -> Dict[str, Any]:
+def sync_events(
+    registry: ServiceRegistry, limit: int = 40, principal: Optional[Principal] = None
+) -> Dict[str, Any]:
+    who = principal or anonymous()
+    registry.guard.check_control(who.ip, "events-sync")
     fresh = registry.events.sync(limit=limit)
+    _audit_control(registry, who, "events_sync", f"ingested={len(fresh)} limit={limit}")
     return {"ingested": len(fresh), "events": [e.model_dump(mode="json") for e in fresh]}
 
 
 # --- agent --------------------------------------------------------------
-def simulate_event(registry: ServiceRegistry, template_key: str) -> Dict[str, Any]:
+def _start_guarded_run(
+    registry: ServiceRegistry,
+    who: Principal,
+    action: str,
+    *,
+    template_key: Optional[str] = None,
+    payload: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Rate-limit, then take the single global agent slot before starting."""
+
+    registry.guard.check_agent(who.ip)
+    registry.guard.concurrency.acquire()
+    try:
+        decision_id = registry.orchestrator.start_run(
+            template_key=template_key,
+            event_payload=payload,
+            on_complete=registry.guard.concurrency.release,
+        )
+    except BaseException:
+        registry.guard.concurrency.release()
+        raise
+    _audit_control(
+        registry,
+        who,
+        action,
+        f"decision={decision_id} template={template_key or 'event_payload'}",
+    )
+    return decision_id
+
+
+def simulate_event(
+    registry: ServiceRegistry, template_key: str, principal: Optional[Principal] = None
+) -> Dict[str, Any]:
     if template_key not in registry.events.template_keys():
         raise KeyError(template_key)
-    decision_id = registry.orchestrator.start_run(template_key=template_key)
+    decision_id = _start_guarded_run(
+        registry, principal or anonymous(), "agent_simulate", template_key=template_key
+    )
     return {"decision_id": decision_id, "status": "running", "template_key": template_key}
 
 
-def run_event_payload(registry: ServiceRegistry, payload: Dict[str, Any]) -> Dict[str, Any]:
-    decision_id = registry.orchestrator.start_run(event_payload=payload)
+def run_event_payload(
+    registry: ServiceRegistry, payload: Dict[str, Any], principal: Optional[Principal] = None
+) -> Dict[str, Any]:
+    decision_id = _start_guarded_run(
+        registry, principal or anonymous(), "event_ingested", payload=payload
+    )
     return {"decision_id": decision_id, "status": "running"}
 
 
 def run_sync(registry: ServiceRegistry, template_key: Optional[str] = None,
-             payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    run = registry.orchestrator.run_sync(template_key=template_key, event_payload=payload)
+             payload: Optional[Dict[str, Any]] = None,
+             principal: Optional[Principal] = None) -> Dict[str, Any]:
+    who = principal or anonymous()
+    registry.guard.check_agent(who.ip)
+    registry.guard.concurrency.acquire()
+    try:
+        run = registry.orchestrator.run_sync(template_key=template_key, event_payload=payload)
+    finally:
+        registry.guard.concurrency.release()
+    if principal is not None:
+        _audit_control(
+            registry, who, "agent_run", f"decision={run.id} template={template_key or 'event_payload'}"
+        )
     return decision_to_dict(run)
 
 

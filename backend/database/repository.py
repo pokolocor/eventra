@@ -21,6 +21,19 @@ from backend.models.domain import DecisionRun, EquityPoint, Event, Position, Tra
 from backend.database.state import PortfolioState, SystemState
 
 class Repository(ABC):
+    # --- identity -------------------------------------------------------
+    @property
+    def kind(self) -> str:
+        """Short label for the STORE badge and `/api/ready`."""
+
+        return "unknown"
+
+    @property
+    def persistent(self) -> bool:
+        """True when state survives a process restart."""
+
+        return False
+
     # --- events ---------------------------------------------------------
     @abstractmethod
     def save_event(self, event: Event) -> None: ...
@@ -69,17 +82,17 @@ class Repository(ABC):
     def save_system(self, state: SystemState) -> None: ...
 
     @abstractmethod
-    def audit(self, actor: str, action: str, detail: str = "") -> None: ...
+    def audit(self, actor: str, action: str, detail: str = "", ip: str = "") -> None: ...
 
     @abstractmethod
     def reset(self) -> None: ...
 
     # --- convenience ----------------------------------------------------
-    def set_kill_switch(self, engaged: bool) -> None:
+    def set_kill_switch(self, engaged: bool, actor: str = "operator", ip: str = "") -> None:
         state = self.load_system()
         state.kill_switch = bool(engaged)
         self.save_system(state)
-        self.audit("operator", "kill_switch", "engaged" if engaged else "disengaged")
+        self.audit(actor, "kill_switch", "engaged" if engaged else "disengaged", ip=ip)
 
     def get_kill_switch(self) -> bool:
         return self.load_system().kill_switch
@@ -107,7 +120,20 @@ def _now() -> datetime:
 
 
 class JsonFileRepository(Repository):
-    """Atomic JSON-file store. Default for Demo Mode and zero-install runs."""
+    """Atomic JSON-file store. Default for Demo Mode and zero-install runs.
+
+    Treated as *ephemeral*: on a platform with an ephemeral filesystem (Render)
+    this state does not survive a redeploy, which is exactly why a configured
+    `DATABASE_URL` is required in production.
+    """
+
+    @property
+    def kind(self) -> str:
+        return "ephemeral"
+
+    @property
+    def persistent(self) -> bool:
+        return False
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -272,11 +298,17 @@ class JsonFileRepository(Repository):
             self._state["system"] = state.to_dict()
             self._flush()
 
-    def audit(self, actor: str, action: str, detail: str = "") -> None:
+    def audit(self, actor: str, action: str, detail: str = "", ip: str = "") -> None:
         with self._lock:
             system = self.load_system()
             system.audit.append(
-                {"timestamp": _now().isoformat(), "actor": actor, "action": action, "detail": detail}
+                {
+                    "timestamp": _now().isoformat(),
+                    "actor": actor,
+                    "action": action,
+                    "detail": detail,
+                    "ip": ip or "",
+                }
             )
             system.audit = system.audit[-1000:]
             self.save_system(system)
@@ -289,6 +321,16 @@ class JsonFileRepository(Repository):
 
 class SqlRepository(Repository):
     """SQLAlchemy-backed repository (PostgreSQL in production, SQLite locally)."""
+
+    @property
+    def kind(self) -> str:
+        from backend.config import _db_backend
+
+        return _db_backend(self.settings.database_url)
+
+    @property
+    def persistent(self) -> bool:
+        return True
 
     def __init__(self, settings: Settings) -> None:
         from backend.database.session import create_session_factory, try_init_schema
@@ -548,12 +590,14 @@ class SqlRepository(Repository):
             )
             session.commit()
 
-    def audit(self, actor: str, action: str, detail: str = "") -> None:
+    def audit(self, actor: str, action: str, detail: str = "", ip: str = "") -> None:
         from backend.database.orm import AuditLogRow
 
         with self._lock, self._session() as session:
             session.add(
-                AuditLogRow(timestamp=_now(), actor=actor, action=action, detail=detail)
+                AuditLogRow(
+                    timestamp=_now(), actor=actor, action=action, detail=detail, ip=ip or ""
+                )
             )
             session.commit()
 
@@ -570,6 +614,7 @@ class SqlRepository(Repository):
                     "actor": row.actor,
                     "action": row.action,
                     "detail": row.detail,
+                    "ip": getattr(row, "ip", "") or "",
                 }
                 for row in reversed(rows)
             ]
@@ -601,27 +646,47 @@ class SqlRepository(Repository):
             session.commit()
 
 
+def _ephemeral_repository(settings: Settings) -> JsonFileRepository:
+    data_dir = Path(settings.data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return JsonFileRepository(data_dir / "eventra_state.json")
+
+
 def create_repository(settings: Settings, force: Optional[str] = None) -> Repository:
     """Pick a repository backend from configuration.
 
-    `EVENTRA_STORE=sql|json` overrides auto-detection. Auto-detection uses SQL
-    whenever SQLAlchemy is importable, otherwise the JSON file store.
+    `EVENTRA_STORE=sql|json` forces a backend. Otherwise SQL is used only when a
+    `DATABASE_URL` is configured *and* SQLAlchemy is importable; with no
+    `DATABASE_URL` Eventra falls back to the ephemeral store and says so loudly.
     """
 
     from backend.database.session import sqlalchemy_available
+    from backend.observability import get_logger
 
+    logger = get_logger("store")
     choice = (force or os.environ.get("EVENTRA_STORE", "")).strip().lower()
-    data_dir = Path(settings.data_dir)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    json_path = data_dir / "eventra_state.json"
 
     if choice == "json":
-        return JsonFileRepository(json_path)
-    if choice == "sql":
-        return SqlRepository(settings)
-    if sqlalchemy_available():
+        return _ephemeral_repository(settings)
+
+    if choice == "sql" and not settings.database_configured:
+        logger.warning("EVENTRA_STORE=sql but DATABASE_URL is empty - using ephemeral store")
+        return _ephemeral_repository(settings)
+
+    if not settings.database_configured:
+        logger.warning("DATABASE_URL not set - using ephemeral store")
+        return _ephemeral_repository(settings)
+
+    if choice == "sql" or sqlalchemy_available():
         try:
             return SqlRepository(settings)
-        except Exception:
-            return JsonFileRepository(json_path)
-    return JsonFileRepository(json_path)
+        except Exception as exc:  # pragma: no cover - depends on the live database
+            logger.error(
+                "DATABASE_URL is set but the SQL store failed to initialise; "
+                "falling back to the ephemeral store",
+                extra={"extra_fields": {"error_type": type(exc).__name__}},
+            )
+            return _ephemeral_repository(settings)
+
+    logger.warning("DATABASE_URL is set but SQLAlchemy is not installed - using ephemeral store")
+    return _ephemeral_repository(settings)

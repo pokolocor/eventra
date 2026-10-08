@@ -114,6 +114,8 @@ class AuditLogRow(Base):
     actor: Mapped[str] = mapped_column(String(64))
     action: Mapped[str] = mapped_column(String(128))
     detail: Mapped[str] = mapped_column(Text, default="")
+    # Client IP of the control action, recorded for every admin call.
+    ip: Mapped[str] = mapped_column(String(64), default="", server_default="")
 
 
 class SignalRecordRow(Base):

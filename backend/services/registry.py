@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional, Tuple
 from backend.config import Settings, load_settings
 from backend.database.repository import Repository, create_repository
 from backend.database.seed import seed_if_empty
+from backend.security import Guard
 from backend.services.demo_llm import DemoLLMService
 from backend.services.event_service import EventService
 from backend.services.execution_service import ExecutionService
@@ -26,7 +27,9 @@ from backend.services.risk_engine import RiskEngine
 
 def build_market_provider(settings: Settings, repository: Repository) -> MarketDataProvider:
     provider = DemoMarketDataProvider()
-    provider.tick = max(0, int(repository.load_system().market_tick or 0))
+    stored = int(repository.load_system().market_tick or 0)
+    # Persisted state wins; `MARKET_TICK` is only the cold-start position.
+    provider.tick = max(0, stored if stored else int(settings.market_tick or 0))
     return provider
 
 
@@ -47,6 +50,7 @@ class ServiceRegistry:
     def __init__(self, settings: Optional[Settings] = None, repository: Optional[Repository] = None) -> None:
         self.settings = settings or load_settings()
         self.repository = repository or create_repository(self.settings)
+        self.guard = Guard(self.settings)
         self.market = build_market_provider(self.settings, self.repository)
         self.news = build_news_provider(self.settings)
 

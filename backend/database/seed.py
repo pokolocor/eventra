@@ -66,9 +66,11 @@ def build_starting_portfolio(registry: Any) -> PortfolioState:
     market = registry.market
     now = datetime.now(timezone.utc)
 
+    # `MARKET_TICK` shifts the whole seeded price path; 0 keeps the default book.
+    base_tick = max(0, int(getattr(settings, "market_tick", 0) or 0))
     for _ in range(SEED_TICK):
         market.advance_tick()
-    registry.repository.set_market_tick(SEED_TICK)
+    registry.repository.set_market_tick(base_tick + SEED_TICK)
 
     state = PortfolioState(starting_balance=settings.starting_balance, cash=0.0)
     cost = 0.0
@@ -78,8 +80,8 @@ def build_starting_portfolio(registry: Any) -> PortfolioState:
         target_value = settings.starting_balance * weight
         quantity = target_value / instrument.base_price
         quantity = round(quantity, 6) if symbol in CRYPTO else round(quantity, 2)
-        entry_price = _price_at(market, symbol, ENTRY_TICK)
-        last_price = _price_at(market, symbol, SEED_TICK)
+        entry_price = _price_at(market, symbol, base_tick + ENTRY_TICK)
+        last_price = _price_at(market, symbol, base_tick + SEED_TICK)
         cost += quantity * entry_price
         state.positions[symbol] = Position(
             symbol=symbol,

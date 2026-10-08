@@ -49,10 +49,19 @@ export default function Page() {
           <Explainability run={run} trades={agent.trades} />
         </section>
 
-        {!agent.online ? (
+        {!agent.online && !agent.loading ? (
           <div className="rounded-md border border-[#5d222c] bg-[#1b0f14] px-3 py-2 font-mono text-[11px] text-bear">
-            Cannot reach the Eventra API. Start the backend with <b>python backend/run.py</b> (or
-            <b> uvicorn backend.main:app</b>) and reload.
+            <div className="flex items-center justify-between gap-3">
+              <span>
+                API unreachable{agent.error ? `: ${agent.error}` : ""} — retrying...
+              </span>
+              <button
+                onClick={() => agent.refresh()}
+                className="rounded bg-bull/20 px-2 py-1 text-[10px] text-bull hover:bg-bull/30"
+              >
+                Retry Now
+              </button>
+            </div>
           </div>
         ) : null}
       </main>

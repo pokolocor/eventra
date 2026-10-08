@@ -28,10 +28,13 @@ export function useEventra(pollMs = 4000) {
   const [templates, setTemplates] = useState<TemplateGroup[]>([]);
   const [activeRun, setActiveRun] = useState<DecisionRun | null>(null);
   const [online, setOnline] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const toastId = useRef(0);
+  const failureCount = useRef(0);
 
   const notify = useCallback((message: string, kind: Toast["kind"] = "ok") => {
     toastId.current += 1;
@@ -52,11 +55,26 @@ export function useEventra(pollMs = 4000) {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [s, e, d] = await Promise.all([api.status(), api.events(40), api.decisions(25)]);
-    setStatus(s);
-    setEvents(e);
-    setDecisions(d);
-    await refreshMarket();
+    try {
+      const [s, e, d] = await Promise.all([api.status(), api.events(40), api.decisions(25)]);
+      setStatus(s);
+      setEvents(e);
+      setDecisions(d);
+      await refreshMarket();
+      setOnline(true);
+      setError(null);
+      failureCount.current = 0;
+    } catch (err) {
+      failureCount.current += 1;
+      setOnline(false);
+      setError(err instanceof Error ? err.message : "Failed to fetch data");
+      if (failureCount.current > 3) {
+        console.warn("Multiple API failures, check backend connectivity");
+      }
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   }, [refreshMarket]);
 
   useEffect(() => {
@@ -70,7 +88,10 @@ export function useEventra(pollMs = 4000) {
           setOnline(true);
         }
       } catch {
-        if (!cancelled) setOnline(false);
+        if (!cancelled) {
+          setOnline(false);
+          setLoading(false);
+        }
       }
     })();
     return () => {
@@ -86,8 +107,12 @@ export function useEventra(pollMs = 4000) {
         setEvents(e);
         await refreshMarket();
         setOnline(true);
-      } catch {
+        setError(null);
+        failureCount.current = 0;
+      } catch (err) {
+        failureCount.current += 1;
         setOnline(false);
+        setError(err instanceof Error ? err.message : "Connection lost");
       }
     }, pollMs);
     return () => clearInterval(id);
@@ -213,7 +238,7 @@ export function useEventra(pollMs = 4000) {
 
   return {
     status, portfolio, history, events, trades, decisions, templates,
-    activeRun, online, busy, toasts,
-    simulate, selectEvent, toggleKillSwitch, reset, syncEvents, notify,
+    activeRun, online, loading, error, busy, toasts,
+    simulate, selectEvent, toggleKillSwitch, reset, syncEvents, notify, refresh,
   };
 }

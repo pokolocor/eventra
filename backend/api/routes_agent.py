@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.api import handlers
-from backend.api.deps import registry
+from backend.api.deps import registry, request_principal
 from backend.schemas.api import DecisionStarted, SimulateEventRequest
+from backend.security import Principal
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -19,21 +20,27 @@ def get_templates() -> List[Dict[str, Any]]:
 
 
 @router.post("/simulate", response_model=DecisionStarted, status_code=202)
-def post_simulate(payload: SimulateEventRequest) -> Dict[str, Any]:
+def post_simulate(
+    payload: SimulateEventRequest, principal: Principal = Depends(request_principal)
+) -> Dict[str, Any]:
+    """Public (it is the demo's whole point) but rate-limited and single-flight."""
+
     service = registry()
     if payload.template_key not in service.events.template_keys():
         raise HTTPException(status_code=404, detail=f"Unknown template '{payload.template_key}'")
-    return handlers.simulate_event(service, payload.template_key)
+    return handlers.simulate_event(service, payload.template_key, principal=principal)
 
 
 @router.post("/run", response_model=None)
-def post_run(payload: SimulateEventRequest) -> Dict[str, Any]:
+def post_run(
+    payload: SimulateEventRequest, principal: Principal = Depends(request_principal)
+) -> Dict[str, Any]:
     """Synchronous variant - returns the complete decision chain in one call."""
 
     service = registry()
     if payload.template_key not in service.events.template_keys():
         raise HTTPException(status_code=404, detail=f"Unknown template '{payload.template_key}'")
-    return handlers.run_sync(service, template_key=payload.template_key)
+    return handlers.run_sync(service, template_key=payload.template_key, principal=principal)
 
 
 @router.get("/decisions", response_model=None)

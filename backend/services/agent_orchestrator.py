@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from backend.config import Settings
 from backend.database.repository import Repository
+from backend.observability import sanitize_llm_error
 from backend.models.domain import (
     DecisionRun,
     Event,
@@ -67,6 +68,7 @@ class AgentOrchestrator:
         self,
         template_key: Optional[str] = None,
         event_payload: Optional[Dict[str, Any]] = None,
+        on_complete: Optional[Callable[[], None]] = None,
     ) -> str:
         decision_id = _id("dec")
         run = DecisionRun(id=decision_id, event=self._placeholder_event(decision_id), status="running")
@@ -75,18 +77,25 @@ class AgentOrchestrator:
 
         worker = threading.Thread(
             target=self._worker,
-            args=(decision_id, template_key, event_payload),
+            args=(decision_id, template_key, event_payload, on_complete),
             name=f"eventra-{decision_id}",
             daemon=True,
         )
         worker.start()
         return decision_id
 
+    def active_run_count(self) -> int:
+        """Number of runs still executing in this process."""
+
+        with self._lock:
+            return sum(1 for run in self._runs.values() if run.status == "running")
+
     def _worker(
         self,
         decision_id: str,
         template_key: Optional[str],
         event_payload: Optional[Dict[str, Any]],
+        on_complete: Optional[Callable[[], None]] = None,
     ) -> None:
         try:
             self.run_sync(decision_id=decision_id, template_key=template_key, event_payload=event_payload)
@@ -95,7 +104,7 @@ class AgentOrchestrator:
                 run = self._runs.get(decision_id)
                 if run is not None:
                     run.status = "failed"
-                    run.error = f"{type(exc).__name__}: {exc}"
+                    run.error = sanitize_llm_error(exc)
                     run.timeline.append(
                         TimelineEntry(
                             stage=PipelineStage.EXECUTION,
@@ -105,6 +114,13 @@ class AgentOrchestrator:
                         )
                     )
                     self.repository.save_decision(run)
+        finally:
+            # Always release the caller's slot, even if the pipeline exploded.
+            if on_complete is not None:
+                try:
+                    on_complete()
+                except Exception:  # pragma: no cover - defensive
+                    pass
 
     def get_run(self, decision_id: str) -> Optional[DecisionRun]:
         with self._lock:
@@ -179,27 +195,69 @@ class AgentOrchestrator:
             analysis = service.analyze_event(event)
         except QwenUnavailableError as exc:
             run.llm_provider = "demo-mock"
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
             self._stage(
                 run,
                 PipelineStage.QWEN_ANALYSIS,
                 "Qwen unavailable - Demo Mode engaged",
-                str(exc),
+                sanitize_llm_error(exc),
                 status="warning",
-                duration_ms=int((time.perf_counter() - started) * 1000),
+                duration_ms=elapsed_ms,
             )
             analysis = self._demo_fallback(event)
             if analysis is None:
                 return None
+            analysis.provider = "demo-mock"
+            analysis.latency_ms = analysis.latency_ms or elapsed_ms
         except QwenServiceError as exc:
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            attempts = int(getattr(exc, "attempts", 0) or 0) or 1
+            reason = sanitize_llm_error(exc)
+            fallback = self._demo_fallback(event)
+
+            if fallback is not None:
+                # Degrade loudly, never silently: the provider label, the
+                # timeline entry and `run.error` all say the LLM failed.
+                fallback.provider = "demo-mock-fallback"
+                fallback.latency_ms = elapsed_ms
+                fallback.attempts = attempts
+                run.llm_provider = "demo-mock-fallback"
+                run.error = reason
+                self._stage(
+                    run,
+                    PipelineStage.QWEN_ANALYSIS,
+                    "Qwen failed - demo-mock fallback engaged",
+                    reason,
+                    status="warning",
+                    duration_ms=elapsed_ms,
+                    payload={
+                        "provider": "demo-mock-fallback",
+                        "degraded": True,
+                        "attempts": attempts,
+                        "latency_ms": elapsed_ms,
+                        "error": reason,
+                    },
+                )
+                run.analysis = fallback
+                self.repository.audit(
+                    "qwen_service",
+                    "llm_fallback_engaged",
+                    f"event={event.id} attempts={attempts} latency_ms={elapsed_ms}",
+                )
+                return fallback
+
+            # No demo interpreter available (demo mode off): fail hard rather
+            # than substitute invented analysis for a real signal.
             run.llm_provider = mode
-            run.error = f"{type(exc).__name__}: {exc}"
+            run.error = reason
             self._stage(
                 run,
                 PipelineStage.QWEN_ANALYSIS,
                 "Qwen analysis failed",
-                run.error,
+                reason,
                 status="error",
-                duration_ms=int((time.perf_counter() - started) * 1000),
+                duration_ms=elapsed_ms,
+                payload={"attempts": attempts, "latency_ms": elapsed_ms, "error": reason},
             )
             return None
 

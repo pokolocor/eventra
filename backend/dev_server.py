@@ -14,37 +14,63 @@ import json
 import mimetypes
 import re
 import sys
+import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from backend.api import handlers
 from backend.config import BACKEND_DIR
+from backend.observability import (
+    REQUEST_ID_HEADER,
+    configure_logging,
+    get_logger,
+    log_startup,
+    new_request_id,
+    safe_detail,
+    startup_warnings,
+)
+from backend.security import (
+    Principal,
+    SecurityError,
+    anonymous,
+    client_ip,
+    get_header,
+    require_admin,
+)
 from backend.services.registry import get_registry
 
 STATIC_DIR = BACKEND_DIR / "static"
 
-Route = Tuple[str, re.Pattern, Callable[..., Any]]
+logger = get_logger("http")
+
+# (method, pattern, handler, requires_admin_token)
+Route = Tuple[str, re.Pattern, Callable[..., Any], bool]
 ROUTES: List[Route] = []
 
 
-def route(method: str, pattern: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def route(
+    method: str, pattern: str, *, admin: bool = False
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     compiled = re.compile(f"^{pattern}$")
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        ROUTES.append((method.upper(), compiled, func))
+        ROUTES.append((method.upper(), compiled, func, admin))
         return func
 
     return decorator
 
 
 class HttpError(Exception):
-    def __init__(self, status: int, detail: str) -> None:
+    def __init__(
+        self, status: int, detail: str, headers: Optional[Mapping[str, str]] = None
+    ) -> None:
         super().__init__(detail)
         self.status = status
         self.detail = detail
+        self.headers: Dict[str, str] = dict(headers or {})
 
 
 def _int_arg(params: Dict[str, List[str]], key: str, default: int) -> int:
@@ -68,6 +94,12 @@ def _health(**_: Any) -> Dict[str, Any]:
     }
 
 
+@route("GET", r"/api/ready")
+def _ready(**_: Any) -> Tuple[int, Dict[str, Any]]:
+    payload = handlers.readiness(get_registry())
+    return (200 if payload.get("ready") else 503), payload
+
+
 @route("GET", r"/api/system/status")
 def _status(**_: Any) -> Dict[str, Any]:
     return handlers.system_status(get_registry())
@@ -78,14 +110,16 @@ def _audit(params: Dict[str, List[str]], **_: Any) -> List[Dict[str, Any]]:
     return handlers.audit_log(get_registry(), limit=_int_arg(params, "limit", 100))
 
 
-@route("POST", r"/api/system/kill-switch")
-def _kill(body: Dict[str, Any], **_: Any) -> Dict[str, Any]:
-    return handlers.set_kill_switch(get_registry(), bool(body.get("engaged", True)))
+@route("POST", r"/api/system/kill-switch", admin=True)
+def _kill(body: Dict[str, Any], principal: Principal, **_: Any) -> Dict[str, Any]:
+    return handlers.set_kill_switch(
+        get_registry(), bool(body.get("engaged", True)), principal=principal
+    )
 
 
-@route("POST", r"/api/system/reset")
-def _reset(**_: Any) -> Dict[str, Any]:
-    return handlers.reset_demo(get_registry())
+@route("POST", r"/api/system/reset", admin=True)
+def _reset(principal: Principal, **_: Any) -> Dict[str, Any]:
+    return handlers.reset_demo(get_registry(), principal=principal)
 
 
 @route("GET", r"/api/market/quotes")
@@ -104,16 +138,18 @@ def _events(params: Dict[str, List[str]], **_: Any) -> List[Dict[str, Any]]:
     return handlers.list_events(get_registry(), limit=_int_arg(params, "limit", 40))
 
 
-@route("POST", r"/api/events/sync")
-def _events_sync(params: Dict[str, List[str]], **_: Any) -> Dict[str, Any]:
-    return handlers.sync_events(get_registry(), limit=_int_arg(params, "limit", 40))
+@route("POST", r"/api/events/sync", admin=True)
+def _events_sync(params: Dict[str, List[str]], principal: Principal, **_: Any) -> Dict[str, Any]:
+    return handlers.sync_events(
+        get_registry(), limit=_int_arg(params, "limit", 40), principal=principal
+    )
 
 
-@route("POST", r"/api/events")
-def _events_post(body: Dict[str, Any], **_: Any) -> Dict[str, Any]:
+@route("POST", r"/api/events", admin=True)
+def _events_post(body: Dict[str, Any], principal: Principal, **_: Any) -> Dict[str, Any]:
     if not body.get("title"):
         raise HttpError(422, "title is required")
-    return handlers.run_event_payload(get_registry(), body)
+    return handlers.run_event_payload(get_registry(), body, principal=principal)
 
 
 @route("GET", r"/api/events/(?P<event_id>[^/]+)")
@@ -131,21 +167,21 @@ def _agent_templates(**_: Any) -> List[Dict[str, Any]]:
 
 
 @route("POST", r"/api/agent/simulate")
-def _simulate(body: Dict[str, Any], **_: Any) -> Dict[str, Any]:
+def _simulate(body: Dict[str, Any], principal: Principal, **_: Any) -> Dict[str, Any]:
     key = str(body.get("template_key") or "")
     service = get_registry()
     if key not in service.events.template_keys():
         raise HttpError(404, f"Unknown template '{key}'")
-    return handlers.simulate_event(service, key)
+    return handlers.simulate_event(service, key, principal=principal)
 
 
 @route("POST", r"/api/agent/run")
-def _run(body: Dict[str, Any], **_: Any) -> Dict[str, Any]:
+def _run(body: Dict[str, Any], principal: Principal, **_: Any) -> Dict[str, Any]:
     key = str(body.get("template_key") or "")
     service = get_registry()
     if key not in service.events.template_keys():
         raise HttpError(404, f"Unknown template '{key}'")
-    return handlers.run_sync(service, template_key=key)
+    return handlers.run_sync(service, template_key=key, principal=principal)
 
 
 @route("GET", r"/api/agent/decisions")
@@ -192,28 +228,56 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     # --- helpers --------------------------------------------------------
+    def _peer_ip(self) -> str:
+        return self.client_address[0] if getattr(self, "client_address", None) else ""
+
     def _cors(self) -> None:
-        origin = self.headers.get("Origin", "*")
-        self.send_header("Access-Control-Allow-Origin", origin)
-        self.send_header("Access-Control-Allow-Credentials", "true")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        """Allow-list CORS. Never reflects an arbitrary origin with credentials."""
+
+        allowed = get_registry().settings.cors_origins
+        origin = self.headers.get("Origin") or ""
+        wildcard = "*" in allowed
+        if wildcard:
+            self.send_header("Access-Control-Allow-Origin", "*")
+        elif origin and origin.rstrip("/") in [o.rstrip("/") for o in allowed]:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header("Vary", "Origin")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, X-Admin-Token, X-Request-ID",
+        )
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Max-Age", "600")
 
-    def _send_json(self, status: int, payload: Any) -> None:
+    def _extra_headers(self, headers: Optional[Mapping[str, str]] = None) -> None:
+        request_id = getattr(self, "_request_id", "")
+        if request_id:
+            self.send_header(REQUEST_ID_HEADER, request_id)
+        for key, value in (headers or {}).items():
+            self.send_header(key, str(value))
+
+    def _send_json(
+        self, status: int, payload: Any, headers: Optional[Mapping[str, str]] = None
+    ) -> None:
         body = json.dumps(payload, default=str).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self._cors()
+        self._extra_headers(headers)
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_bytes(self, status: int, body: bytes, content_type: str) -> None:
+    def _send_bytes(
+        self, status: int, body: bytes, content_type: str,
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self._cors()
+        self._extra_headers(headers)
         self.end_headers()
         self.wfile.write(body)
 
@@ -233,6 +297,7 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
         return parsed
 
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: A003
+        # Access logging is emitted as structured JSON by `_dispatch` instead.
         if getattr(self.server, "verbose", False):
             sys.stderr.write("[eventra] " + (fmt % args) + "\n")
 
@@ -253,34 +318,76 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         params = parse_qs(parsed.query)
+        self._request_id = get_header(self.headers, REQUEST_ID_HEADER) or new_request_id()
+        settings = get_registry().settings
 
         if not path.startswith("/api"):
             self._serve_static(path)
             return
 
-        for route_method, pattern, func in ROUTES:
+        started = time.perf_counter()
+        status_code = 500
+        for route_method, pattern, func, needs_admin in ROUTES:
             if route_method != method:
                 continue
             match = pattern.match(path)
             if not match:
                 continue
             try:
+                if needs_admin:
+                    principal = require_admin(settings, self.headers, self._peer_ip())
+                else:
+                    principal = anonymous(
+                        client_ip(self.headers, self._peer_ip()), self._request_id
+                    )
                 kwargs: Dict[str, Any] = dict(match.groupdict())
+                kwargs["principal"] = principal
                 body = self._read_body() if method == "POST" else {}
                 if body:
                     kwargs["body"] = body
                 kwargs["params"] = params
                 result = func(**kwargs)
-                self._send_json(202 if path == "/api/agent/simulate" else 200, result)
+                status_code = 202 if path == "/api/agent/simulate" else 200
+                extra: Optional[Mapping[str, str]] = None
+                if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], int):
+                    status_code, result = result
+                self._send_json(status_code, result, headers=extra)
+            except SecurityError as exc:
+                status_code = exc.status
+                self._send_json(exc.status, {"detail": exc.detail}, headers=exc.headers)
             except HttpError as exc:
-                self._send_json(exc.status, {"detail": exc.detail})
+                status_code = exc.status
+                self._send_json(exc.status, {"detail": exc.detail}, headers=exc.headers)
             except KeyError as exc:
+                status_code = 404
                 self._send_json(404, {"detail": f"Not found: {exc}"})
             except Exception as exc:  # pragma: no cover - defensive
-                traceback.print_exc()
-                self._send_json(500, {"detail": f"{type(exc).__name__}: {exc}"})
+                status_code = 500
+                if not settings.is_production:
+                    traceback.print_exc()
+                logger.exception(
+                    "unhandled error",
+                    extra={
+                        "request_id": self._request_id,
+                        "extra_fields": {"method": method, "path": path},
+                    },
+                )
+                self._send_json(500, {"detail": safe_detail(exc, settings, self._request_id)})
+            finally:
+                fields = {
+                    "method": method,
+                    "path": path,
+                    "status_code": status_code,
+                    "duration_ms": int((time.perf_counter() - started) * 1000),
+                    "ip": client_ip(self.headers, self._peer_ip()),
+                }
+                if status_code >= 500:
+                    logger.warning("request", extra={"request_id": self._request_id, "extra_fields": fields})
+                else:
+                    logger.info("request", extra={"request_id": self._request_id, "extra_fields": fields})
             return
 
+        status_code = 404
         self._send_json(404, {"detail": f"No route for {method} {path}"})
 
     # --- static ---------------------------------------------------------
@@ -307,7 +414,10 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
 
 
 def serve(host: str = "127.0.0.1", port: int = 8000, verbose: bool = False) -> ThreadingHTTPServer:
-    get_registry().bootstrap()
+    registry = get_registry()
+    configure_logging(registry.settings)
+    log_startup(registry.settings, registry.repository.kind)
+    registry.bootstrap()
     httpd = ThreadingHTTPServer((host, port), EventraRequestHandler)
     httpd.daemon_threads = True
     httpd.verbose = verbose  # type: ignore[attr-defined]
@@ -334,8 +444,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"  Terminal : http://{host}:{port}/")
     print(f"  LLM      : {registry.settings.llm_mode}"
           f" ({'Qwen ' + registry.settings.qwen_model if registry.qwen.available else 'Demo Mode - set QWEN_API_KEY'})")
-    print(f"  Store    : {type(registry.repository).__name__}")
+    print(f"  Store    : {registry.repository.kind} ({type(registry.repository).__name__})")
+    print(f"  Env      : {registry.settings.environment}")
+    print(f"  Admin    : {'token required' if registry.settings.admin_auth_required else 'open (development only)'}")
     print("  Mode     : PAPER / DEMO  (no real orders are ever sent)")
+    print("=" * 68)
+    for warning in startup_warnings(registry.settings):
+        print(f"  [warn] {warning}")
     print("=" * 68)
     try:
         httpd.serve_forever()
