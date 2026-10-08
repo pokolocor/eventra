@@ -9,8 +9,7 @@ from typing import Any, AsyncIterator, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, RedirectResponsefrom fastapi.staticfiles import StaticFiles
 
 from backend.config import BACKEND_DIR, settings
 from backend.api.routes_agent import router as agent_router
@@ -126,11 +125,3 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
 
 
 if STATIC_DIR.exists():
-    app.mount("/ui", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
-
-    @app.get("/", include_in_schema=False)
-    def terminal() -> Any:
-        index = STATIC_DIR / "index.html"
-        if index.exists():
-            return FileResponse(str(index))
-        return JSONResponse({"detail": "Demo terminal UI not built yet. Use /docs or /api."})
