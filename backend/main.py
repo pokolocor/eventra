@@ -123,5 +123,5 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
             content={"detail": "Internal server error", "request_id": request_id}
         )
 
-
 if STATIC_DIR.exists():
+    app.mount("/ui", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
