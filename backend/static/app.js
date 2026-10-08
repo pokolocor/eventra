@@ -637,11 +637,23 @@ $("#resetBtn").addEventListener("click", async () => {
 });
 
 $("#syncBtn").addEventListener("click", async () => {
+  const token = window.prompt("Enter the admin token:");
+  if (!token) return;
+
   try {
-    const result = await api("/api/events/sync?limit=40", { method: "POST", body: "{}" });
+    const result = await api("/api/events/sync?limit=40", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Token": token,
+      },
+      body: "{}",
+    });
+
     await refreshEvents();
     toast(`Ingested ${result.ingested} new event(s) from the provider.`, "ok");
-  } catch (err) { toast("Sync failed: " + err.message, "err"); }
+  } catch (err) {
+    toast("Sync failed: " + err.message, "err");
+  }
 });
-
 boot();
