@@ -1,4 +1,4 @@
-"""Eventra FastAPI application."""
+﻿"""Eventra FastAPI application."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Any, AsyncIterator, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponsefrom fastapi.staticfiles import StaticFiles
-
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from backend.config import BACKEND_DIR, settings
 from backend.api.routes_agent import router as agent_router
 from backend.api.routes_events import router as events_router
