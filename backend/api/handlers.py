@@ -439,3 +439,78 @@ def performance_metrics(registry: ServiceRegistry) -> Dict[str, Any]:
 def bitget_status(registry: ServiceRegistry) -> Dict[str, Any]:
     """Return Bitget demo trading status and account info."""
     return registry.bitget.health_check()
+
+
+# --- analyze pending events --------------------------------------------
+def analyze_pending_events(
+    registry: ServiceRegistry, principal: Principal
+) -> Dict[str, Any]:
+    """Analyze all pending events that haven't been processed yet."""
+    from backend.observability import sanitize_llm_error
+
+    # Get all events
+    all_events = registry.events.list_events(limit=100)
+
+    # Find events without decisions
+    decisions = registry.repository.list_decisions(limit=500)
+    analyzed_event_ids = {d.event.id for d in decisions}
+
+    pending_events = [e for e in all_events if e.id not in analyzed_event_ids]
+
+    results = {
+        "total_pending": len(pending_events),
+        "analyzed": 0,
+        "failed": 0,
+        "details": [],
+    }
+
+    # Analyze up to 10 events per request
+    for event in pending_events[:10]:
+        try:
+            run = registry.orchestrator.run_sync(
+                event_payload=event.model_dump(mode="json")
+            )
+            if run.status == "completed":
+                results["analyzed"] += 1
+                results["details"].append(
+                    {
+                        "event_id": event.id,
+                        "title": event.title[:80],
+                        "status": "completed",
+                        "trades": len(run.trades),
+                        "confidence": run.analysis.confidence if run.analysis else None,
+                    }
+                )
+            else:
+                results["failed"] += 1
+                results["details"].append(
+                    {
+                        "event_id": event.id,
+                        "title": event.title[:80],
+                        "status": "failed",
+                        "error": run.error,
+                    }
+                )
+        except Exception as exc:
+            results["failed"] += 1
+            results["details"].append(
+                {
+                    "event_id": event.id,
+                    "title": event.title[:80],
+                    "status": "error",
+                    "error": str(exc),
+                }
+            )
+
+    logger.info(
+        "analyze_pending",
+        extra={
+            "extra_fields": {
+                "total_pending": results["total_pending"],
+                "analyzed": results["analyzed"],
+                "failed": results["failed"],
+            }
+        },
+    )
+
+    return results

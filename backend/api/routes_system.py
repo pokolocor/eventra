@@ -88,3 +88,9 @@ def metrics() -> Dict[str, Any]:
 def bitget_status() -> Dict[str, Any]:
     """Bitget demo trading connection status and account info."""
     return handlers.bitget_status(registry())
+
+
+@router.post("/api/system/analyze-pending", response_model=None)
+def analyze_pending(principal: Principal = Depends(admin_principal)) -> Dict[str, Any]:
+    """Analyze all pending events that haven't been processed yet."""
+    return handlers.analyze_pending_events(registry(), principal=principal)

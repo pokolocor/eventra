@@ -30,12 +30,13 @@ STATIC_DIR = BACKEND_DIR / "static"
 AUTO_SYNC_INTERVAL = 300
 
 
-async def auto_sync_events() -> None:
-    """Background task to periodically sync live events."""
+async def auto_sync_and_analyze() -> None:
+    """Background task to periodically sync live events and auto-analyze pending ones."""
     while True:
         try:
             await asyncio.sleep(AUTO_SYNC_INTERVAL)
             registry = get_registry()
+
             # Only sync if using a live provider (not demo)
             if registry.news.name != "demo":
                 fresh = registry.events.sync(limit=20)
@@ -43,10 +44,41 @@ async def auto_sync_events() -> None:
                     logger.info(
                         f"Auto-sync: {len(fresh)} new events from {registry.news.name}"
                     )
+
+            # Auto-analyze pending events (limit to 3 per cycle to avoid overwhelming Qwen)
+            # Get all events and check which ones don't have decisions yet
+            all_events = registry.events.list_events(limit=100)
+            pending_events = []
+            for event in all_events:
+                # Check if this event has been analyzed
+                decisions = registry.repository.list_decisions(limit=500)
+                has_decision = any(d.event.id == event.id for d in decisions)
+                if not has_decision:
+                    pending_events.append(event)
+
+            analyzed = 0
+            for event in pending_events[:3]:  # Max 3 per cycle
+                try:
+                    # Run the agent on this event
+                    run = registry.orchestrator.run_sync(
+                        event_payload=event.model_dump(mode="json")
+                    )
+                    if run.status == "completed":
+                        analyzed += 1
+                        logger.info(
+                            f"Auto-analyzed event {event.id}: {run.status}, {len(run.trades)} trades"
+                        )
+                    await asyncio.sleep(2)  # Brief pause between analyses
+                except Exception as exc:
+                    logger.warning(f"Auto-analysis failed for event {event.id}: {exc}")
+
+            if analyzed > 0:
+                logger.info(f"Auto-analysis cycle: {analyzed} events processed")
+
         except asyncio.CancelledError:
             break
         except Exception as exc:
-            logger.warning(f"Auto-sync failed: {exc}")
+            logger.warning(f"Auto-sync/analyze failed: {exc}")
 
 
 @asynccontextmanager
@@ -59,7 +91,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Start auto-sync task if using live news provider
     sync_task = None
     if registry.news.name != "demo":
-        sync_task = asyncio.create_task(auto_sync_events())
+        sync_task = asyncio.create_task(auto_sync_and_analyze())
         logger.info(
             f"Auto-sync enabled: fetching live events from {registry.news.name} every {AUTO_SYNC_INTERVAL}s"
         )

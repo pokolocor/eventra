@@ -250,3 +250,155 @@ class FinnhubNewsProvider(NewsProvider):
             "raw": item,
             "is_simulated": False,
         }
+
+
+class GDELTNewsProvider(NewsProvider):
+    """Free global events from GDELT Project (no API key required).
+
+    GDELT monitors news from every country in 100+ languages and identifies
+    the people, locations, and themes that drive global events.
+    Website: https://www.gdeltproject.org/
+    """
+
+    name = "gdelt"
+    BASE_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
+
+    # Map GDELT themes to Eventra categories
+    THEME_MAP = {
+        "ECON": "macro",
+        "FINANCE": "macro",
+        "POL": "geopolitical",
+        "GOV": "geopolitical",
+        "CRIME": "other",
+        "PROTEST": "geopolitical",
+        "WAR": "geopolitical",
+        "HEALTH": "other",
+        "ENV": "commodity",
+        "ENERGY": "commodity",
+        "TECH": "other",
+    }
+
+    def __init__(self, timeout: float = 15.0) -> None:
+        self.timeout = timeout
+
+    def fetch_events(
+        self, limit: int = 25, since: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
+        # Query for recent financial/economic news
+        query = "finance OR economy OR market OR fed OR inflation OR earnings"
+        params = (
+            f"query={query}&mode=artlist&format=json&maxrecords={min(limit, 50)}"
+            f"&timespan=1d&sort=datedesc"
+        )
+        url = f"{self.BASE_URL}?{params}"
+
+        request = urllib.request.Request(url, headers={"Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+            urllib.error.HTTPError,
+        ):
+            return []
+
+        articles = payload.get("articles", [])
+        if not isinstance(articles, list):
+            return []
+
+        events: List[Dict[str, Any]] = []
+        for item in articles:
+            mapped = self._map_item(item)
+            if mapped is None:
+                continue
+            timestamp = mapped["timestamp"]
+            if since is not None and timestamp < since:
+                continue
+            events.append(mapped)
+            if len(events) >= limit:
+                break
+
+        events.sort(key=lambda e: e["timestamp"], reverse=True)
+        return events
+
+    def _map_item(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        title = str(item.get("title") or "").strip()
+        if not title:
+            return None
+
+        # Parse timestamp
+        raw_ts = item.get("seendate") or item.get("date")
+        try:
+            # GDELT format: 20261010T120000Z
+            if raw_ts and len(raw_ts) >= 15:
+                timestamp = datetime.strptime(raw_ts[:15], "%Y%m%dT%H%M%S")
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+            else:
+                timestamp = datetime.now(timezone.utc)
+        except (TypeError, ValueError):
+            timestamp = datetime.now(timezone.utc)
+
+        # Extract source
+        source = str(item.get("domain") or item.get("source") or "unknown")
+
+        # Determine category from themes
+        themes = item.get("theme") or []
+        if isinstance(themes, str):
+            themes = [themes]
+
+        eventra_cat = "other"
+        for theme in themes:
+            theme_upper = theme.upper()
+            for key, value in self.THEME_MAP.items():
+                if key in theme_upper:
+                    eventra_cat = value
+                    break
+            if eventra_cat != "other":
+                break
+
+        # Determine importance
+        summary = str(item.get("summary") or "")
+        importance = "medium"
+        title_lower = title.lower()
+        if any(
+            kw in title_lower
+            for kw in ["fed", "fomc", "cpi", "gdp", "jobs", "inflation", "rate"]
+        ):
+            importance = "high"
+        elif any(kw in title_lower for kw in ["market", "stock", "bond", "crypto"]):
+            importance = "medium"
+
+        # Try to extract mentioned assets
+        assets = []
+        # Look for common tickers in title
+        ticker_patterns = [
+            "AAPL",
+            "GOOGL",
+            "MSFT",
+            "AMZN",
+            "TSLA",
+            "NVDA",
+            "META",
+            "SPY",
+            "QQQ",
+            "BTC",
+            "ETH",
+        ]
+        for ticker in ticker_patterns:
+            if ticker in title.upper():
+                assets.append(ticker)
+
+        return {
+            "id": _stable_id(title, source),
+            "timestamp": timestamp.isoformat(),
+            "title": title,
+            "source": source,
+            "category": eventra_cat,
+            "summary": summary[:500] if summary else "",
+            "affected_assets": assets[:5],
+            "importance": importance,
+            "raw": item,
+            "is_simulated": False,
+        }
