@@ -103,10 +103,12 @@ async function boot() {
   loadMarketStatus();
   loadArbitrage();
   loadMetrics();
+  loadBitgetMarketData();
   setInterval(() => {
     loadMarketStatus();
     loadArbitrage();
     loadMetrics();
+    loadBitgetMarketData();
   }, 30000); // Refresh every 30s
 }
 
@@ -845,6 +847,70 @@ async function loadMetrics() {
   } catch (err) {
     $("#metricsPanel").innerHTML = `<div class="empty">Failed to load metrics</div>`;
   }
+}
+
+// Load Bitget live market data
+async function loadBitgetMarketData() {
+  try {
+    const data = await api('/api/market/live');
+    updateCryptoPricesTable(data.prices);
+    updateFundingRatesTable(data.funding_rates);
+    document.getElementById('bitgetBadge').textContent = 'LIVE';
+    document.getElementById('bitgetBadge').className = 'badge ok';
+  } catch (err) {
+    console.error('Failed to load Bitget market data:', err);
+    document.getElementById('bitgetBadge').textContent = 'OFFLINE';
+    document.getElementById('bitgetBadge').className = 'badge err';
+  }
+}
+
+function updateCryptoPricesTable(prices) {
+  const tbody = document.querySelector('#cryptoPrices tbody');
+  if (!prices || Object.keys(prices).length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No price data available</td></tr>';
+    return;
+  }
+
+  const rows = Object.entries(prices).map(([symbol, data]) => {
+    const changeClass = data.change_24h >= 0 ? 'pos' : 'neg';
+    const changeSign = data.change_24h >= 0 ? '+' : '';
+    const volume = (data.quote_volume_24h / 1e6).toFixed(2);
+    
+    return `
+      <tr>
+        <td><strong>${symbol}</strong></td>
+        <td>$${data.price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+        <td class="${changeClass}">${changeSign}${(data.change_24h * 100).toFixed(2)}%</td>
+        <td>$${volume}M</td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.innerHTML = rows;
+}
+
+function updateFundingRatesTable(rates) {
+  const tbody = document.querySelector('#fundingRates tbody');
+  if (!rates || Object.keys(rates).length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="empty">No funding rate data available</td></tr>';
+    return;
+  }
+
+  const rows = Object.entries(rates).map(([symbol, data]) => {
+    const rate = (data.funding_rate * 100).toFixed(4);
+    const annualized = (data.funding_rate * 3 * 365 * 100).toFixed(2); // 8h intervals = 3 per day
+    const rateClass = data.funding_rate >= 0 ? 'pos' : 'neg';
+    
+    return `
+      <tr>
+        <td><strong>${symbol}</strong></td>
+        <td class="${rateClass}">${rate}%</td>
+        <td class="${rateClass}">${annualized}%</td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.innerHTML = rows;
 }
 
 boot();

@@ -82,6 +82,31 @@
 
     <div class="panel">
       <div class="panel-head">
+        <h2>Live Bitget Market Data</h2>
+        <span class="badge ok" id="bitgetBadge">LIVE</span>
+      </div>
+      <div class="panel-body scroll" style="max-height:400px">
+        <div class="section-label">Crypto Prices (Spot)</div>
+        <table id="cryptoPrices">
+          <thead><tr>
+            <th>Symbol</th><th>Price</th><th>24h Change</th><th>Volume</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="section-label">Funding Rates (Futures)</div>
+        <table id="fundingRates">
+          <thead><tr>
+            <th>Symbol</th><th>Rate</th><th>Annualized</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid-2">
+    <div class="panel">
+      <div class="panel-head">
         <h2>Performance Metrics</h2>
         <span class="badge" id="metricsMeta">&mdash;</span>
       </div>
@@ -89,9 +114,7 @@
         <div id="metricsPanel"><div class="empty">Loading metrics...</div></div>
       </div>
     </div>
-  </section>
 
-  <section class="grid-2">
     <div class="panel">
       <div class="panel-head">
         <h2>Portfolio Value</h2>
@@ -102,22 +125,6 @@
           <svg class="chart" id="chart" preserveAspectRatio="none"></svg>
           <div class="chart-tip" id="chartTip"></div>
         </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head">
-        <h2>Positions</h2>
-        <span class="badge" id="posMeta">&mdash;</span>
-      </div>
-      <div class="panel-body scroll" style="max-height:280px;padding:0">
-        <table id="positions">
-          <thead><tr>
-            <th>Asset</th><th>Qty</th><th>Entry</th><th>Last</th>
-            <th>PnL</th><th>Weight</th><th>Conviction</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
       </div>
     </div>
   </section>
