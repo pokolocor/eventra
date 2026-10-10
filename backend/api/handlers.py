@@ -514,3 +514,112 @@ def analyze_pending_events(
     )
 
     return results
+
+
+# --- live market data ---------------------------------------------------
+def live_market_data() -> Dict[str, Any]:
+    """Fetch live market data from Bitget."""
+    from backend.services.providers.bitget_market import BitgetMarketData
+
+    market = BitgetMarketData()
+    return market.get_market_summary()
+
+
+# --- arbitrage detection ------------------------------------------------
+def arbitrage_detection() -> Dict[str, Any]:
+    """Detect rToken arbitrage opportunities."""
+    from backend.services.providers.rtoken_arbitrage import RTokenArbitrageDetector
+    from backend.services.providers.bitget_market import BitgetMarketData
+
+    # Get live crypto prices
+    market = BitgetMarketData()
+    crypto_prices = market.get_crypto_prices(["BTC", "ETH"])
+
+    # Simulate rToken prices (in production, these would come from Bitget rToken markets)
+    # For demo, we'll add small random premiums/discounts
+    import random
+
+    rtoken_prices = {}
+    underlying_prices = {}
+
+    for symbol, data in crypto_prices.items():
+        # Simulate rToken with small premium/discount
+        premium = random.uniform(-0.02, 0.03)  # -2% to +3%
+        rtoken_prices[f"r{symbol}"] = data["price"] * (1 + premium)
+        underlying_prices[symbol] = data["price"]
+
+    detector = RTokenArbitrageDetector()
+    opportunities = detector.detect_arbitrage(
+        rtoken_prices, underlying_prices, threshold_pct=0.5
+    )
+    weekend_analysis = detector.check_weekend_premium(rtoken_prices, underlying_prices)
+
+    return {
+        "opportunities": opportunities,
+        "weekend_analysis": weekend_analysis,
+        "rtoken_prices": rtoken_prices,
+        "underlying_prices": underlying_prices,
+    }
+
+
+# --- weekend analysis ---------------------------------------------------
+def weekend_analysis() -> Dict[str, Any]:
+    """Analyze weekend/after-hours status and opportunities."""
+    from backend.services.providers.weekend_detector import WeekendEventDetector
+    from datetime import datetime, timezone
+
+    detector = WeekendEventDetector()
+    now = datetime.now(timezone.utc)
+
+    return {
+        "current_time": now.isoformat(),
+        "is_weekend": detector.is_weekend(now),
+        "is_market_open": detector.is_market_open(now),
+        "is_after_hours": detector.is_after_hours(now),
+        "market_status": detector._get_market_status(now),
+        "day_of_week": now.strftime("%A"),
+        "trading_implications": {
+            "rToken_active": detector.is_weekend(now) or detector.is_after_hours(now),
+            "traditional_market": "OPEN" if detector.is_market_open(now) else "CLOSED",
+            "gap_risk": "high"
+            if detector.is_weekend(now)
+            else "medium"
+            if detector.is_after_hours(now)
+            else "low",
+        },
+    }
+
+
+# --- multi-agent debate -------------------------------------------------
+def run_debate(registry: ServiceRegistry, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Run multi-agent bull vs bear debate on an event."""
+    from backend.services.multi_agent_debate import MultiAgentDebate
+    from backend.models.domain import Event, EventCategory, EventImportance
+    from datetime import datetime, timezone
+
+    # Build event from payload
+    event = Event(
+        id=payload.get(
+            "id", f"evt_debate_{int(datetime.now(timezone.utc).timestamp())}"
+        ),
+        timestamp=datetime.fromisoformat(
+            payload.get("timestamp", datetime.now(timezone.utc).isoformat())
+        ),
+        title=payload.get("title", "Unknown event"),
+        source=payload.get("source", "Unknown"),
+        category=EventCategory(payload.get("category", "other")),
+        summary=payload.get("summary", ""),
+        affected_assets=payload.get("affected_assets", []),
+        importance=EventImportance(payload.get("importance", "medium")),
+        raw=payload.get("raw", {}),
+    )
+
+    debate = MultiAgentDebate(registry.settings)
+    result = debate.run_debate(event)
+
+    return {
+        "bull_case": result["bull_case"],
+        "bear_case": result["bear_case"],
+        "judge_decision": result["judge_decision"],
+        "metadata": result["metadata"],
+    }

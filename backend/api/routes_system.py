@@ -94,3 +94,27 @@ def bitget_status() -> Dict[str, Any]:
 def analyze_pending(principal: Principal = Depends(admin_principal)) -> Dict[str, Any]:
     """Analyze all pending events that haven't been processed yet."""
     return handlers.analyze_pending_events(registry(), principal=principal)
+
+
+@router.get("/api/market/live", response_model=None)
+def live_market_data() -> Dict[str, Any]:
+    """Live market data from Bitget (crypto prices and funding rates)."""
+    return handlers.live_market_data()
+
+
+@router.get("/api/market/arbitrage", response_model=None)
+def arbitrage_opportunities() -> Dict[str, Any]:
+    """Detect rToken arbitrage opportunities between tokenized and underlying assets."""
+    return handlers.arbitrage_detection()
+
+
+@router.get("/api/market/weekend", response_model=None)
+def weekend_analysis() -> Dict[str, Any]:
+    """Analyze current weekend/after-hours status and opportunities."""
+    return handlers.weekend_analysis()
+
+
+@router.post("/api/agent/debate", response_model=None)
+def run_debate(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Run multi-agent bull vs bear debate on an event."""
+    return handlers.run_debate(registry(), payload)

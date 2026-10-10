@@ -27,30 +27,22 @@ from pydantic import ValidationError
 from backend.config import Settings, settings as default_settings
 from backend.models.domain import Event, QwenAnalysis
 
-SYSTEM_PROMPT = """You are Eventra's market interpretation engine.
-You convert a single financial event into a strict, machine-readable trading thesis.
+SYSTEM_PROMPT = """Eventra market analysis engine. Convert event to JSON trading thesis.
 
-Rules:
-- You analyse. You never place orders and you never assume an order will be executed.
-- Every numeric field must respect its documented range.
-- impact_score is 0-100 (100 = maximum expected price impact).
-- confidence is a probability between 0 and 1.
-- Only include portfolio_actions you would genuinely defend. Use percentages of the
-  CURRENT portfolio weight for that symbol (0-100).
-- Respond with a single JSON object and nothing else. No prose, no markdown fences.
-
-Required JSON schema:
+JSON schema:
 {
-  "event_type": "macro | monetary_policy | inflation | employment | growth | earnings | geopolitical | crypto_regulation | commodity | other",
-  "sentiment": "bullish | bearish | neutral | mixed",
-  "market_regime": "risk_on | risk_off | neutral",
-  "confidence": 0.0,
-  "affected_assets": [{"symbol": "TICKER", "direction": "positive | negative | neutral", "impact_score": 0}],
-  "time_horizon": "intraday | 1-5 days | 1-4 weeks | 1-6 months",
-  "recommended_action": "increase_risk | reduce_risk | hold | hedge | rotate",
-  "portfolio_actions": [{"symbol": "TICKER", "action": "BUY | SELL | INCREASE | REDUCE | HOLD | HEDGE", "percentage": 0}],
-  "reasoning_summary": "One tight paragraph a portfolio manager can read in ten seconds."
-}"""
+  "event_type": "macro|monetary_policy|inflation|employment|growth|earnings|geopolitical|crypto_regulation|commodity|other",
+  "sentiment": "bullish|bearish|neutral|mixed",
+  "market_regime": "risk_on|risk_off|neutral",
+  "confidence": 0.0-1.0,
+  "affected_assets": [{"symbol":"TICKER","direction":"positive|negative|neutral","impact_score":0-100}],
+  "time_horizon": "intraday|1-5 days|1-4 weeks|1-6 months",
+  "recommended_action": "increase_risk|reduce_risk|hold|hedge|rotate",
+  "portfolio_actions": [{"symbol":"TICKER","action":"BUY|SELL|INCREASE|REDUCE|HOLD|HEDGE","percentage":0-100}],
+  "reasoning_summary": "Brief paragraph."
+}
+
+Rules: JSON only. impact_score 0-100. confidence 0-1. percentage = % of current weight."""
 
 REPAIR_PROMPT = """Your previous reply could not be parsed into the required schema.
 Validation errors:
@@ -125,7 +117,9 @@ def extract_json(text: str) -> Dict[str, Any]:
 class QwenService:
     """Thin, dependency-free client for the Qwen chat completions API."""
 
-    def __init__(self, config: Optional[Settings] = None, transport: Optional[Any] = None) -> None:
+    def __init__(
+        self, config: Optional[Settings] = None, transport: Optional[Any] = None
+    ) -> None:
         self.config = config or default_settings
         # `transport` is injectable for tests: callable(payload) -> dict
         self._transport = transport
@@ -147,19 +141,14 @@ class QwenService:
 
     def build_user_prompt(self, event: Event) -> str:
         payload = {
-            "timestamp": event.timestamp.isoformat(),
             "title": event.title,
             "source": event.source,
             "category": event.category.value,
             "importance": event.importance.value,
-            "summary": event.summary,
-            "affected_assets_hint": event.affected_assets,
-            "raw": event.raw,
+            "summary": event.summary[:300],  # Truncate long summaries
+            "assets": event.affected_assets[:5],  # Limit assets
         }
-        return (
-            "Analyse this market event and return the JSON object only.\n\n"
-            f"EVENT:\n{json.dumps(payload, indent=2, default=str)}"
-        )
+        return f"Analyze event, return JSON:\n{json.dumps(payload, default=str)}"
 
     def analyze_event(self, event: Event) -> QwenAnalysis:
         """Run Qwen against an event and return a validated analysis."""
@@ -191,7 +180,10 @@ class QwenService:
                 last_error = exc
                 messages = messages + [
                     {"role": "assistant", "content": completion},
-                    {"role": "user", "content": REPAIR_PROMPT.format(errors=str(exc)[:1200])},
+                    {
+                        "role": "user",
+                        "content": REPAIR_PROMPT.format(errors=str(exc)[:1200]),
+                    },
                 ]
                 continue
 
@@ -214,6 +206,7 @@ class QwenService:
             "model": self.config.qwen_model,
             "messages": messages,
             "temperature": self.config.qwen_temperature,
+            "max_tokens": 800,  # Limit response size for speed
             "response_format": {"type": "json_object"},
         }
         if self._transport is not None:
@@ -245,7 +238,9 @@ class QwenService:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.config.qwen_timeout_seconds) as response:
+            with urllib.request.urlopen(
+                request, timeout=self.config.qwen_timeout_seconds
+            ) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = ""
@@ -253,7 +248,9 @@ class QwenService:
                 detail = exc.read().decode("utf-8", errors="replace")[:500]
             except Exception:  # pragma: no cover - best effort diagnostics
                 pass
-            raise QwenAPIError(f"Qwen API HTTP {exc.code}: {detail or exc.reason}", exc.code) from exc
+            raise QwenAPIError(
+                f"Qwen API HTTP {exc.code}: {detail or exc.reason}", exc.code
+            ) from exc
         except urllib.error.URLError as exc:
             raise QwenAPIError(f"Qwen API unreachable: {exc.reason}") from exc
         except TimeoutError as exc:
