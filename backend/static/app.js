@@ -99,6 +99,15 @@ async function boot() {
     showOfflineBanner(err && err.message);
   }
   setInterval(tick, 4000);
+  // Load new features
+  loadMarketStatus();
+  loadArbitrage();
+  loadMetrics();
+  setInterval(() => {
+    loadMarketStatus();
+    loadArbitrage();
+    loadMetrics();
+  }, 30000); // Refresh every 30s
 }
 
 function showOfflineBanner(reason) {
@@ -697,5 +706,145 @@ $("#analyzeBtn").addEventListener("click", async () => {
     $("#analyzeBtn").textContent = "ANALYZE PENDING";
   }
 });
+
+// --- 7x24 Market Status ---
+async function loadMarketStatus() {
+  try {
+    const data = await api("/api/market/weekend");
+    const statusEl = $("#marketStatus");
+    const contentEl = $("#weekendStatus");
+    
+    statusEl.textContent = data.market_status;
+    statusEl.className = "badge " + (data.is_market_open ? "ok" : "warn");
+    
+    let html = `
+      <div class="market-info">
+        <div class="info-row">
+          <span class="info-label">Day:</span>
+          <span class="info-value">${data.day_of_week}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Traditional Market:</span>
+          <span class="info-value ${data.traditional_market === 'OPEN' ? 'pos' : 'neg'}">${data.traditional_market}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">rToken Market:</span>
+          <span class="info-value ${data.trading_implications.rToken_active ? 'pos' : 'neu'}">${data.trading_implications.rToken_active ? 'ACTIVE' : 'INACTIVE'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Gap Risk:</span>
+          <span class="info-value ${data.trading_implications.gap_risk === 'high' ? 'neg' : data.trading_implications.gap_risk === 'medium' ? 'warn' : 'neu'}">${data.trading_implications.gap_risk.toUpperCase()}</span>
+        </div>
+      </div>
+    `;
+    
+    if (data.is_weekend || data.is_after_hours) {
+      html += `
+        <div class="alert-box weekend-alert">
+          <div class="alert-icon">⚡</div>
+          <div class="alert-text">
+            <strong>7x24 Trading Active</strong><br>
+            <small>rTokens are trading while traditional markets are closed. Event-driven opportunities may exist.</small>
+          </div>
+        </div>
+      `;
+    }
+    
+    contentEl.innerHTML = html;
+  } catch (err) {
+    $("#weekendStatus").innerHTML = `<div class="empty">Failed to load market status</div>`;
+  }
+}
+
+// --- rToken Arbitrage ---
+async function loadArbitrage() {
+  try {
+    const data = await api("/api/market/arbitrage");
+    const panel = $("#arbitragePanel");
+    
+    if (!data.opportunities || data.opportunities.length === 0) {
+      panel.innerHTML = `<div class="empty">No arbitrage opportunities detected</div>`;
+      return;
+    }
+    
+    let html = '<div class="arb-list">';
+    for (const opp of data.opportunities.slice(0, 5)) {
+      const premiumClass = opp.premium_pct > 0 ? 'pos' : 'neg';
+      const premiumSign = opp.premium_pct > 0 ? '+' : '';
+      html += `
+        <div class="arb-item">
+          <div class="arb-header">
+            <span class="arb-symbol">${opp.rtoken} → ${opp.underlying}</span>
+            <span class="arb-premium ${premiumClass}">${premiumSign}${opp.premium_pct.toFixed(2)}%</span>
+          </div>
+          <div class="arb-details">
+            <span>rToken: $${opp.rtoken_price.toFixed(2)}</span>
+            <span>Underlying: $${opp.underlying_price.toFixed(2)}</span>
+          </div>
+          <div class="arb-action">${opp.action}</div>
+        </div>
+      `;
+    }
+    html += '</div>';
+    panel.innerHTML = html;
+  } catch (err) {
+    $("#arbitragePanel").innerHTML = `<div class="empty">Failed to load arbitrage data</div>`;
+  }
+}
+
+// --- Performance Metrics ---
+async function loadMetrics() {
+  try {
+    const data = await api("/api/metrics");
+    const panel = $("#metricsPanel");
+    const meta = $("#metricsMeta");
+    
+    meta.textContent = `${data.total_trades} trades`;
+    
+    const sharpeClass = data.sharpe_ratio > 0 ? 'pos' : data.sharpe_ratio < 0 ? 'neg' : 'neu';
+    const sortinoClass = data.sortino_ratio > 0 ? 'pos' : data.sortino_ratio < 0 ? 'neg' : 'neu';
+    const drawdownClass = data.max_drawdown_pct < -5 ? 'neg' : data.max_drawdown_pct < -2 ? 'warn' : 'neu';
+    const winRateClass = data.win_rate > 60 ? 'pos' : data.win_rate < 40 ? 'neg' : 'neu';
+    
+    let html = `
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Sharpe Ratio</div>
+          <div class="metric-value ${sharpeClass}">${data.sharpe_ratio.toFixed(2)}</div>
+          <div class="metric-desc">Risk-adjusted return</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Sortino Ratio</div>
+          <div class="metric-value ${sortinoClass}">${data.sortino_ratio.toFixed(2)}</div>
+          <div class="metric-desc">Downside risk adjusted</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Max Drawdown</div>
+          <div class="metric-value ${drawdownClass}">${data.max_drawdown_pct.toFixed(2)}%</div>
+          <div class="metric-desc">Largest peak-to-trough</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Win Rate</div>
+          <div class="metric-value ${winRateClass}">${data.win_rate.toFixed(1)}%</div>
+          <div class="metric-desc">${data.winning_trades}/${data.total_trades} trades</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Profit Factor</div>
+          <div class="metric-value ${data.profit_factor > 1.5 ? 'pos' : data.profit_factor > 1 ? 'neu' : 'neg'}">${data.profit_factor.toFixed(2)}</div>
+          <div class="metric-desc">Gross profit/loss ratio</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Total Fees</div>
+          <div class="metric-value">$${data.total_fees.toFixed(2)}</div>
+          <div class="metric-desc">Transaction costs</div>
+        </div>
+      </div>
+    `;
+    
+    panel.innerHTML = html;
+  } catch (err) {
+    $("#metricsPanel").innerHTML = `<div class="empty">Failed to load metrics</div>`;
+  }
+}
 
 boot();
