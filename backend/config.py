@@ -179,8 +179,8 @@ class Settings:
 
     # --- LLM (Qwen) -----------------------------------------------------
     qwen_api_key: str = ""
-    qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    qwen_model: str = "qwen-plus"
+    qwen_base_url: str = "https://hackathon.bitgetops.com/v1"
+    qwen_model: str = "qwen3.8-max"
     qwen_timeout_seconds: float = 30.0
     qwen_max_retries: int = 2
     qwen_temperature: float = 0.2
@@ -357,12 +357,11 @@ def load_settings(env_file: Path | None = None) -> Settings:
     return Settings(
         qwen_api_key=os.environ.get("QWEN_API_KEY", "").strip(),
         qwen_base_url=(
-            _first_env("QWEN_BASE_URL")
-            or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            _first_env("QWEN_BASE_URL") or "https://hackathon.bitgetops.com/v1"
         ).rstrip("/"),
-        qwen_model=os.environ.get("QWEN_MODEL", "qwen-plus").strip() or "qwen-plus",
+        qwen_model=os.environ.get("QWEN_MODEL", "qwen3.8-max").strip() or "qwen3.8-max",
         qwen_timeout_seconds=_first_float(
-            ("QWEN_TIMEOUT_SECONDS", "LLM_TIMEOUT_SECONDS"), 15.0
+            ("QWEN_TIMEOUT_SECONDS", "LLM_TIMEOUT_SECONDS"), 60.0
         ),
         qwen_max_retries=_first_int(("QWEN_MAX_RETRIES", "LLM_MAX_RETRIES"), 2),
         qwen_temperature=_get_float("QWEN_TEMPERATURE", 0.2),
