@@ -96,6 +96,7 @@ def _first_float(names: Tuple[str, ...], default: float) -> float:
 # deploy is reachable even before `CORS_ORIGINS` is set; `CORS_ORIGINS` always
 # wins when present. This is a *frontend* origin, not an API endpoint.
 DEFAULT_PROD_FRONTEND_ORIGIN = "https://eventra-frontend-sy4w.onrender.com"
+DEFAULT_PROD_BACKEND_ORIGIN = "https://eventra-1-9ltz.onrender.com"
 
 DEFAULT_CORS_ORIGINS: Tuple[str, ...] = (
     "http://localhost:3000",
@@ -103,6 +104,7 @@ DEFAULT_CORS_ORIGINS: Tuple[str, ...] = (
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     DEFAULT_PROD_FRONTEND_ORIGIN,
+    DEFAULT_PROD_BACKEND_ORIGIN,
 )
 
 PRODUCTION_WORDS = {"prod", "production"}
