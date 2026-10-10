@@ -1,7 +1,8 @@
-﻿"""Eventra FastAPI application."""
+"""Eventra FastAPI application."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -19,12 +20,33 @@ from backend.api.routes_system import router as system_router
 from backend.services.registry import get_registry
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = BACKEND_DIR / "static"
+
+# Auto-sync interval in seconds (5 minutes)
+AUTO_SYNC_INTERVAL = 300
+
+
+async def auto_sync_events() -> None:
+    """Background task to periodically sync live events."""
+    while True:
+        try:
+            await asyncio.sleep(AUTO_SYNC_INTERVAL)
+            registry = get_registry()
+            # Only sync if using a live provider (not demo)
+            if registry.news.name != "demo":
+                fresh = registry.events.sync(limit=20)
+                if fresh:
+                    logger.info(
+                        f"Auto-sync: {len(fresh)} new events from {registry.news.name}"
+                    )
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning(f"Auto-sync failed: {exc}")
 
 
 @asynccontextmanager
@@ -34,13 +56,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.registry = registry
     app.state.bootstrap = result
 
+    # Start auto-sync task if using live news provider
+    sync_task = None
+    if registry.news.name != "demo":
+        sync_task = asyncio.create_task(auto_sync_events())
+        logger.info(
+            f"Auto-sync enabled: fetching live events from {registry.news.name} every {AUTO_SYNC_INTERVAL}s"
+        )
+
     logger.info(
         f"Eventra started | mode={'demo' if settings.demo_mode else 'production'} | "
         f"llm={'qwen' if settings.qwen_available else 'demo-mock'} | "
-        f"db={settings.database_url}"
+        f"news={registry.news.name} | db={settings.database_url}"
     )
 
-    yield
+    # Initial sync on startup for live providers
+    if registry.news.name != "demo":
+        try:
+            fresh = registry.events.sync(limit=20)
+            logger.info(f"Initial sync: {len(fresh)} events from {registry.news.name}")
+        except Exception as exc:
+            logger.warning(f"Initial sync failed: {exc}")
+
+    try:
+        yield
+    finally:
+        if sync_task:
+            sync_task.cancel()
+            try:
+                await sync_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(
@@ -115,13 +161,17 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
     if settings.demo_mode:
         return JSONResponse(
             status_code=500,
-            content={"detail": f"{type(exc).__name__}: {exc}", "request_id": request_id}
+            content={
+                "detail": f"{type(exc).__name__}: {exc}",
+                "request_id": request_id,
+            },
         )
     else:
         return JSONResponse(
             status_code=500,
-            content={"detail": "Internal server error", "request_id": request_id}
+            content={"detail": "Internal server error", "request_id": request_id},
         )
+
 
 if STATIC_DIR.exists():
     app.mount("/ui", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")

@@ -26,6 +26,7 @@ from backend.services.providers.market_data import (
 )
 from backend.services.providers.news import (
     DemoNewsProvider,
+    FinnhubNewsProvider,
     HttpNewsProvider,
     NewsProvider,
 )
@@ -44,6 +45,11 @@ def build_market_provider(
 
 
 def build_news_provider(settings: Settings) -> NewsProvider:
+    # Priority: Finnhub (live) > Custom HTTP > Demo (seeded)
+    finnhub_key = os.environ.get("FINNHUB_API_KEY", "").strip()
+    if finnhub_key:
+        return FinnhubNewsProvider(api_key=finnhub_key)
+
     url = os.environ.get("EVENTRA_NEWS_URL", "").strip()
     if url:
         return HttpNewsProvider(

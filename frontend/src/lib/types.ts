@@ -202,6 +202,7 @@ export interface SystemStatus {
   market_tick: number;
   llm: { provider: string; model: string; configured: boolean; base_url: string };
   bitget: { configured: boolean; mode: string };
+  news: { provider: string; live: boolean };
   database: { url: string; backend: string };
   risk_limits: Record<string, number>;
   counts: { events: number; decisions: number; trades: number; positions: number };

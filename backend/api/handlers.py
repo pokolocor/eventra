@@ -90,6 +90,10 @@ def system_status(registry: ServiceRegistry) -> Dict[str, Any]:
                 ),
                 "last_decision_id": decisions[0].id if decisions else None,
             },
+            "news": {
+                "provider": registry.news.name,
+                "live": registry.news.name != "demo",
+            },
         }
     )
     # Reflect the store actually in use, not just what configuration asked for.
