@@ -30,6 +30,9 @@ services:
       QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
       EVENTRA_DEMO_MODE: ${EVENTRA_DEMO_MODE:-true}
       EVENTRA_CORS_ORIGINS: http://localhost:3000
+      BITGET_API_KEY: ${BITGET_API_KEY:-}
+      BITGET_API_SECRET: ${BITGET_API_SECRET:-}
+      BITGET_PASSPHRASE: ${BITGET_PASSPHRASE:-}
     ports:
       - "8000:8000"
 

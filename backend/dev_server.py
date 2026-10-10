@@ -139,14 +139,18 @@ def _events(params: Dict[str, List[str]], **_: Any) -> List[Dict[str, Any]]:
 
 
 @route("POST", r"/api/events/sync", admin=True)
-def _events_sync(params: Dict[str, List[str]], principal: Principal, **_: Any) -> Dict[str, Any]:
+def _events_sync(
+    params: Dict[str, List[str]], principal: Principal, **_: Any
+) -> Dict[str, Any]:
     return handlers.sync_events(
         get_registry(), limit=_int_arg(params, "limit", 40), principal=principal
     )
 
 
 @route("POST", r"/api/events", admin=True)
-def _events_post(body: Dict[str, Any], principal: Principal, **_: Any) -> Dict[str, Any]:
+def _events_post(
+    body: Dict[str, Any], principal: Principal, **_: Any
+) -> Dict[str, Any]:
     if not body.get("title"):
         raise HttpError(422, "title is required")
     return handlers.run_event_payload(get_registry(), body, principal=principal)
@@ -223,6 +227,17 @@ def _portfolio(**_: Any) -> Dict[str, Any]:
     return handlers.portfolio_view(get_registry())
 
 
+# --- metrics & bitget ---------------------------------------------------
+@route("GET", r"/api/metrics")
+def _metrics(**_: Any) -> Dict[str, Any]:
+    return handlers.performance_metrics(get_registry())
+
+
+@route("GET", r"/api/bitget/status")
+def _bitget_status(**_: Any) -> Dict[str, Any]:
+    return handlers.bitget_status(get_registry())
+
+
 class EventraRequestHandler(BaseHTTPRequestHandler):
     server_version = "EventraDev/1.0"
     protocol_version = "HTTP/1.1"
@@ -270,7 +285,10 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _send_bytes(
-        self, status: int, body: bytes, content_type: str,
+        self,
+        status: int,
+        body: bytes,
+        content_type: str,
         headers: Optional[Mapping[str, str]] = None,
     ) -> None:
         self.send_response(status)
@@ -318,7 +336,9 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         params = parse_qs(parsed.query)
-        self._request_id = get_header(self.headers, REQUEST_ID_HEADER) or new_request_id()
+        self._request_id = (
+            get_header(self.headers, REQUEST_ID_HEADER) or new_request_id()
+        )
         settings = get_registry().settings
 
         if not path.startswith("/api"):
@@ -349,7 +369,11 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
                 result = func(**kwargs)
                 status_code = 202 if path == "/api/agent/simulate" else 200
                 extra: Optional[Mapping[str, str]] = None
-                if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], int):
+                if (
+                    isinstance(result, tuple)
+                    and len(result) == 2
+                    and isinstance(result[0], int)
+                ):
                     status_code, result = result
                 self._send_json(status_code, result, headers=extra)
             except SecurityError as exc:
@@ -372,7 +396,9 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
                         "extra_fields": {"method": method, "path": path},
                     },
                 )
-                self._send_json(500, {"detail": safe_detail(exc, settings, self._request_id)})
+                self._send_json(
+                    500, {"detail": safe_detail(exc, settings, self._request_id)}
+                )
             finally:
                 fields = {
                     "method": method,
@@ -382,9 +408,15 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
                     "ip": client_ip(self.headers, self._peer_ip()),
                 }
                 if status_code >= 500:
-                    logger.warning("request", extra={"request_id": self._request_id, "extra_fields": fields})
+                    logger.warning(
+                        "request",
+                        extra={"request_id": self._request_id, "extra_fields": fields},
+                    )
                 else:
-                    logger.info("request", extra={"request_id": self._request_id, "extra_fields": fields})
+                    logger.info(
+                        "request",
+                        extra={"request_id": self._request_id, "extra_fields": fields},
+                    )
             return
 
         status_code = 404
@@ -407,13 +439,20 @@ class EventraRequestHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"detail": f"Not found: {path}"})
             return
 
-        content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-        if content_type.startswith("text/") or content_type in {"application/javascript", "application/json"}:
+        content_type = (
+            mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        )
+        if content_type.startswith("text/") or content_type in {
+            "application/javascript",
+            "application/json",
+        }:
             content_type = f"{content_type}; charset=utf-8"
         self._send_bytes(200, target.read_bytes(), content_type)
 
 
-def serve(host: str = "127.0.0.1", port: int = 8000, verbose: bool = False) -> ThreadingHTTPServer:
+def serve(
+    host: str = "127.0.0.1", port: int = 8000, verbose: bool = False
+) -> ThreadingHTTPServer:
     registry = get_registry()
     configure_logging(registry.settings)
     log_startup(registry.settings, registry.repository.kind)
@@ -442,11 +481,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("=" * 68)
     print(f"  API      : http://{host}:{port}/api")
     print(f"  Terminal : http://{host}:{port}/")
-    print(f"  LLM      : {registry.settings.llm_mode}"
-          f" ({'Qwen ' + registry.settings.qwen_model if registry.qwen.available else 'Demo Mode - set QWEN_API_KEY'})")
-    print(f"  Store    : {registry.repository.kind} ({type(registry.repository).__name__})")
+    print(
+        f"  LLM      : {registry.settings.llm_mode}"
+        f" ({'Qwen ' + registry.settings.qwen_model if registry.qwen.available else 'Demo Mode - set QWEN_API_KEY'})"
+    )
+    print(
+        f"  Store    : {registry.repository.kind} ({type(registry.repository).__name__})"
+    )
     print(f"  Env      : {registry.settings.environment}")
-    print(f"  Admin    : {'token required' if registry.settings.admin_auth_required else 'open (development only)'}")
+    print(
+        f"  Admin    : {'token required' if registry.settings.admin_auth_required else 'open (development only)'}"
+    )
     print("  Mode     : PAPER / DEMO  (no real orders are ever sent)")
     print("=" * 68)
     for warning in startup_warnings(registry.settings):

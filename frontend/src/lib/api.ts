@@ -10,7 +10,7 @@ import type {
   Trade,
 } from "./types";
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.EVENTRA_API_URL || "http://localhost:8000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();

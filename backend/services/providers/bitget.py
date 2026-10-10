@@ -199,7 +199,7 @@ class MockBitgetTransport:
                 "unrealizedPL": "0.0",
                 "marginRatio": "0.5",
             }
-        elif "/orders" in path and method.upper() == "POST":
+        elif "/order" in path and method.upper() == "POST":
             order_id = f"bitget_{int(time.time() * 1000)}"
             order = BitgetOrder(
                 order_id=order_id,
@@ -331,6 +331,20 @@ class BitgetDemoService:
 
         # Map Eventra symbols to Bitget symbols
         bitget_symbol = self._map_symbol(symbol)
+        if bitget_symbol is None:
+            logger.info(
+                "bitget_skip_non_crypto",
+                extra={"extra_fields": {"symbol": symbol}},
+            )
+            return BitgetOrder(
+                order_id=f"skipped_{int(time.time() * 1000)}",
+                symbol=symbol,
+                side=bitget_side,
+                size=size,
+                price=price,
+                order_type=order_type,
+                status="skipped",
+            )
 
         body = {
             "symbol": bitget_symbol,
@@ -379,25 +393,38 @@ class BitgetDemoService:
             )
             raise
 
-    def _map_symbol(self, symbol: str) -> str:
-        """Map Eventra symbol to Bitget symbol format."""
-        # Eventra uses symbols like "BTC", "ETH", "AAPL"
-        # Bitget uses "BTCUSDT", "ETHUSDT", etc. for crypto
-        # For stocks, Bitget may not support them directly
+    # Symbols that Bitget supports as USDT-margined futures.
+    SUPPORTED_CRYPTO = {
+        "BTC": "BTCUSDT",
+        "ETH": "ETHUSDT",
+        "SOL": "SOLUSDT",
+        "BNB": "BNBUSDT",
+        "XRP": "XRPUSDT",
+        "DOGE": "DOGEUSDT",
+        "ADA": "ADAUSDT",
+        "AVAX": "AVAXUSDT",
+        "DOT": "DOTUSDT",
+        "LINK": "LINKUSDT",
+        "MATIC": "MATICUSDT",
+        "UNI": "UNIUSDT",
+        "ATOM": "ATOMUSDT",
+        "LTC": "LTCUSDT",
+    }
 
-        crypto_map = {
-            "BTC": "BTCUSDT",
-            "ETH": "ETHUSDT",
-            "SOL": "SOLUSDT",
-            "BNB": "BNBUSDT",
-            "XRP": "XRPUSDT",
-        }
+    def _map_symbol(self, symbol: str) -> Optional[str]:
+        """Map Eventra symbol to Bitget symbol format.
 
-        if symbol in crypto_map:
-            return crypto_map[symbol]
+        Returns None for assets Bitget does not support (stocks, ETFs).
+        """
+        if symbol in self.SUPPORTED_CRYPTO:
+            return self.SUPPORTED_CRYPTO[symbol]
 
-        # For stocks/ETFs, append USDT (Bitget may not support these)
-        return f"{symbol}USDT"
+        # Non-crypto assets (stocks, ETFs) are not supported on Bitget
+        logger.info(
+            "bitget_symbol_not_supported",
+            extra={"extra_fields": {"symbol": symbol}},
+        )
+        return None
 
     # --- status ---------------------------------------------------------
     def is_configured(self) -> bool:
