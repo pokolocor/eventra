@@ -139,6 +139,11 @@ async function refreshStatus() {
   const llm = state.status.llm || {};
   $("#llmBadge").textContent = "LLM " + (llm.provider === "qwen" ? "QWEN " + (llm.model || "") : "DEMO MOCK");
   $("#llmBadge").className = "badge " + (llm.provider === "qwen" ? "ok" : "warn");
+  const news = state.status.news || {};
+  $("#newsBadge").textContent = "NEWS " + (news.live ? "LIVE (" + news.provider.toUpperCase() + ")" : "DEMO");
+  $("#newsBadge").className = "badge " + (news.live ? "ok" : "warn");
+  $("#newsProvider").textContent = news.live ? "LIVE" : "DEMO";
+  $("#newsProvider").className = "badge " + (news.live ? "ok" : "warn");
   $("#dbBadge").textContent = "STORE " + String((state.status.database || {}).backend || "?").toUpperCase();
   const ks = $("#killSwitch");
   ks.classList.toggle("armed", state.killSwitch);
@@ -285,9 +290,11 @@ async function refreshEvents() {
 }
 
 function renderFeed(events, animateNew) {
-  if (!events.length) { $("#eventFeed").innerHTML = `<div class="empty">No events yet.</div>`; return; }
+  if (!events.length) { $("#eventFeed").innerHTML = `<div class="empty">No events yet. Click SYNC to fetch live news.</div>`; return; }
   $("#eventFeed").innerHTML = events.map((e) => {
     const decision = e.decision;
+    const isLive = e.raw && e.raw.provider && e.raw.provider !== "demo" && e.raw.provider !== "eventra-simulator";
+    const liveBadge = isLive ? `<span class="tag live">LIVE</span>` : "";
     const pill = decision
       ? `<span class="pill ${e.analysis_status}">${e.analysis_status.toUpperCase()}${
           decision.risk_status ? " &middot; " + decision.risk_status : ""}</span>`
@@ -296,7 +303,7 @@ function renderFeed(events, animateNew) {
       .map((s) => `<span class="tag sym">${esc(s)}</span>`).join("");
     return `<div class="event imp-${esc(e.importance)}" data-id="${esc(e.id)}"
         data-template="${esc((e.raw || {}).template_key || "")}">
-      <div class="event-top">${pill}<span class="tag time">${timeAgo(e.timestamp)}</span>
+      <div class="event-top">${pill}${liveBadge}<span class="tag time">${timeAgo(e.timestamp)}</span>
         <span class="spacer"></span><span class="tag">${esc(e.importance)}</span></div>
       <h3>${esc(e.title)}</h3>
       <p>${esc(e.summary)}</p>
@@ -656,4 +663,39 @@ $("#syncBtn").addEventListener("click", async () => {
     toast("Sync failed: " + err.message, "err");
   }
 });
+
+$("#analyzeBtn").addEventListener("click", async () => {
+  const token = window.prompt("Enter the admin token to analyze pending events:");
+  if (!token) return;
+
+  $("#analyzeBtn").disabled = true;
+  $("#analyzeBtn").textContent = "ANALYZING...";
+
+  try {
+    const result = await api("/api/system/analyze-pending", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Token": token,
+      },
+      body: "{}",
+    });
+
+    await Promise.all([refreshEvents(), refreshDecisions(), refreshPortfolio()]);
+    
+    if (result.analyzed > 0) {
+      toast(`Analyzed ${result.analyzed} event(s) with Qwen. ${result.failed > 0 ? result.failed + ' failed.' : ''}`, "ok");
+    } else if (result.total_pending === 0) {
+      toast("No pending events to analyze.", "warn");
+    } else {
+      toast(`Analysis complete. ${result.failed} failed.`, "warn");
+    }
+  } catch (err) {
+    toast("Analysis failed: " + err.message, "err");
+  } finally {
+    $("#analyzeBtn").disabled = false;
+    $("#analyzeBtn").textContent = "ANALYZE PENDING";
+  }
+});
+
 boot();

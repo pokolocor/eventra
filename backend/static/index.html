@@ -19,6 +19,7 @@
   <div class="topbar-right">
     <span class="badge mode" id="modeBadge">PAPER / DEMO</span>
     <span class="badge" id="llmBadge">LLM &mdash;</span>
+    <span class="badge" id="newsBadge">NEWS &mdash;</span>
     <span class="badge" id="dbBadge">STORE &mdash;</span>
     <span class="badge ok" id="connBadge">CONNECTING</span>
     <button class="kill" id="killSwitch" title="Global emergency stop">KILL SWITCH</button>
@@ -34,7 +35,9 @@
       <div class="panel-head">
         <h2>Live Event Feed</h2>
         <div class="row">
+          <span class="badge" id="newsProvider">DEMO</span>
           <span class="badge" id="eventCount">0 events</span>
+          <button class="ghost" id="analyzeBtn" title="Analyze all pending events with Qwen">ANALYZE PENDING</button>
           <button class="ghost" id="syncBtn">SYNC</button>
         </div>
       </div>

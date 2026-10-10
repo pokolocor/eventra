@@ -95,6 +95,7 @@ main{padding:14px 18px 40px;display:flex;flex-direction:column;gap:14px;max-widt
 .tag.sym{color:var(--cyan);border-color:#1d4550}
 .tag.time{color:var(--muted)}
 .tag.src{color:var(--violet);border-color:#322a52}
+.tag.live{color:var(--green);border-color:#1d5541;background:var(--green-dim);font-weight:600}
 .pill{font-family:var(--mono);font-size:9.5px;padding:2px 6px;border-radius:99px;letter-spacing:.06em}
 .pill.pending{background:#141a24;color:var(--dim);border:1px solid var(--line)}
 .pill.running{background:#12283d;color:var(--blue);border:1px solid #1e4a70}
