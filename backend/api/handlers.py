@@ -53,7 +53,9 @@ def summarise(run: DecisionRun) -> Dict[str, Any]:
         "confidence": run.analysis.confidence if run.analysis else None,
         "sentiment": run.analysis.sentiment.value if run.analysis else None,
         "market_regime": run.analysis.market_regime.value if run.analysis else None,
-        "recommended_action": run.analysis.recommended_action.value if run.analysis else None,
+        "recommended_action": run.analysis.recommended_action.value
+        if run.analysis
+        else None,
         "trade_count": len(run.trades),
         "symbols": sorted({t.symbol for t in run.trades}),
         "stages_completed": [entry.stage.value for entry in run.timeline],
@@ -79,7 +81,13 @@ def system_status(registry: ServiceRegistry) -> Dict[str, Any]:
             "agent": {
                 "decisions_total": len(decisions),
                 "decisions_executed": len(executed),
-                "decisions_rejected": len([d for d in decisions if d.risk and d.risk.status.value == "REJECTED"]),
+                "decisions_rejected": len(
+                    [
+                        d
+                        for d in decisions
+                        if d.risk and d.risk.status.value == "REJECTED"
+                    ]
+                ),
                 "last_decision_id": decisions[0].id if decisions else None,
             },
         }
@@ -184,7 +192,9 @@ def set_kill_switch(
     return {"kill_switch": engaged_now}
 
 
-def reset_demo(registry: ServiceRegistry, principal: Optional[Principal] = None) -> Dict[str, Any]:
+def reset_demo(
+    registry: ServiceRegistry, principal: Optional[Principal] = None
+) -> Dict[str, Any]:
     who = principal or anonymous()
     require_reset_allowed(registry.settings)
     registry.guard.check_control(who.ip, "reset")
@@ -242,7 +252,10 @@ def sync_events(
     registry.guard.check_control(who.ip, "events-sync")
     fresh = registry.events.sync(limit=limit)
     _audit_control(registry, who, "events_sync", f"ingested={len(fresh)} limit={limit}")
-    return {"ingested": len(fresh), "events": [e.model_dump(mode="json") for e in fresh]}
+    return {
+        "ingested": len(fresh),
+        "events": [e.model_dump(mode="json") for e in fresh],
+    }
 
 
 # --- agent --------------------------------------------------------------
@@ -284,11 +297,17 @@ def simulate_event(
     decision_id = _start_guarded_run(
         registry, principal or anonymous(), "agent_simulate", template_key=template_key
     )
-    return {"decision_id": decision_id, "status": "running", "template_key": template_key}
+    return {
+        "decision_id": decision_id,
+        "status": "running",
+        "template_key": template_key,
+    }
 
 
 def run_event_payload(
-    registry: ServiceRegistry, payload: Dict[str, Any], principal: Optional[Principal] = None
+    registry: ServiceRegistry,
+    payload: Dict[str, Any],
+    principal: Optional[Principal] = None,
 ) -> Dict[str, Any]:
     decision_id = _start_guarded_run(
         registry, principal or anonymous(), "event_ingested", payload=payload
@@ -296,24 +315,34 @@ def run_event_payload(
     return {"decision_id": decision_id, "status": "running"}
 
 
-def run_sync(registry: ServiceRegistry, template_key: Optional[str] = None,
-             payload: Optional[Dict[str, Any]] = None,
-             principal: Optional[Principal] = None) -> Dict[str, Any]:
+def run_sync(
+    registry: ServiceRegistry,
+    template_key: Optional[str] = None,
+    payload: Optional[Dict[str, Any]] = None,
+    principal: Optional[Principal] = None,
+) -> Dict[str, Any]:
     who = principal or anonymous()
     registry.guard.check_agent(who.ip)
     registry.guard.concurrency.acquire()
     try:
-        run = registry.orchestrator.run_sync(template_key=template_key, event_payload=payload)
+        run = registry.orchestrator.run_sync(
+            template_key=template_key, event_payload=payload
+        )
     finally:
         registry.guard.concurrency.release()
     if principal is not None:
         _audit_control(
-            registry, who, "agent_run", f"decision={run.id} template={template_key or 'event_payload'}"
+            registry,
+            who,
+            "agent_run",
+            f"decision={run.id} template={template_key or 'event_payload'}",
         )
     return decision_to_dict(run)
 
 
-def get_decision(registry: ServiceRegistry, decision_id: str) -> Optional[Dict[str, Any]]:
+def get_decision(
+    registry: ServiceRegistry, decision_id: str
+) -> Optional[Dict[str, Any]]:
     run = registry.orchestrator.get_run(decision_id)
     return decision_to_dict(run) if run else None
 
@@ -382,9 +411,21 @@ def explain_symbol(registry: ServiceRegistry, symbol: str) -> Dict[str, Any]:
     for run in runs:
         answer = why_symbol(run, symbol)
         if answer and any(t.symbol == symbol.upper() for t in run.trades):
-            return {"symbol": symbol.upper(), "decision_id": run.id, "explanation": answer}
+            return {
+                "symbol": symbol.upper(),
+                "decision_id": run.id,
+                "explanation": answer,
+            }
     return {
         "symbol": symbol.upper(),
         "decision_id": None,
         "explanation": f"No recent Eventra decision touched {symbol.upper()}.",
     }
+
+
+# --- performance metrics -----------------------------------------------
+def performance_metrics(registry: ServiceRegistry) -> Dict[str, Any]:
+    from backend.services.metrics_service import MetricsService
+
+    metrics = MetricsService(registry.repository)
+    return metrics.compute_all()

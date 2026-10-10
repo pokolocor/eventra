@@ -76,3 +76,9 @@ def audit(limit: int = Query(100, ge=1, le=1000)) -> List[Dict[str, Any]]:
 @router.get("/api/market/quotes", response_model=None)
 def quotes() -> List[Dict[str, Any]]:
     return handlers.market_quotes(registry())
+
+
+@router.get("/api/metrics", response_model=None)
+def metrics() -> Dict[str, Any]:
+    """Performance metrics for hackathon submission (Sharpe, drawdown, win rate, etc.)."""
+    return handlers.performance_metrics(registry())

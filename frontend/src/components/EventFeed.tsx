@@ -78,6 +78,11 @@ export default function EventFeed({ events, activeEventId, onSelect, onSync }: P
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 <span className="tag border-[#322a52] text-violet">{event.source}</span>
                 <span className="tag">{event.category}</span>
+                {event.is_simulated && (
+                  <span className="rounded-full border border-[#5a4415] bg-[#3d2c0c]/40 px-1.5 py-0.5 font-mono text-[9px] tracking-[0.06em] text-warn">
+                    SIMULATED
+                  </span>
+                )}
                 {event.affected_assets.slice(0, 5).map((symbol) => (
                   <span key={symbol} className="tag tag-sym">
                     {symbol}

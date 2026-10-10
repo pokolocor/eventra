@@ -6,6 +6,7 @@ import type {
   DecisionRun,
   EquityPoint,
   MarketEvent,
+  PerformanceMetrics,
   PortfolioView,
   SystemStatus,
   TemplateGroup,
@@ -27,6 +28,7 @@ export function useEventra(pollMs = 4000) {
   const [decisions, setDecisions] = useState<DecisionRun[]>([]);
   const [templates, setTemplates] = useState<TemplateGroup[]>([]);
   const [activeRun, setActiveRun] = useState<DecisionRun | null>(null);
+  const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   const [online, setOnline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,13 +56,22 @@ export function useEventra(pollMs = 4000) {
     setTrades(t);
   }, []);
 
+  const refreshMetrics = useCallback(async () => {
+    try {
+      const m = await api.metrics();
+      setMetrics(m);
+    } catch {
+      // Metrics are non-critical; don't fail the whole refresh
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const [s, e, d] = await Promise.all([api.status(), api.events(40), api.decisions(25)]);
       setStatus(s);
       setEvents(e);
       setDecisions(d);
-      await refreshMarket();
+      await Promise.all([refreshMarket(), refreshMetrics()]);
       setOnline(true);
       setError(null);
       failureCount.current = 0;
@@ -75,7 +86,7 @@ export function useEventra(pollMs = 4000) {
     } finally {
       setLoading(false);
     }
-  }, [refreshMarket]);
+  }, [refreshMarket, refreshMetrics]);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,8 +140,10 @@ export function useEventra(pollMs = 4000) {
     (decisionId: string) => {
       stopPolling();
       let elapsed = 0;
+      const POLL_INTERVAL = 500;
+      const MAX_WAIT = 120_000; // 120s - Qwen LLM calls can take 60-90s
       pollRef.current = setInterval(async () => {
-        elapsed += 350;
+        elapsed += POLL_INTERVAL;
         try {
           const run = await api.decision(decisionId);
           setActiveRun(run);
@@ -146,17 +159,17 @@ export function useEventra(pollMs = 4000) {
             } else {
               notify(`Decision ${run.status}${run.error ? `: ${run.error}` : ""}`, "warn");
             }
-          } else if (elapsed > 30000) {
+          } else if (elapsed > MAX_WAIT) {
             stopPolling();
             setBusy(false);
-            notify("Timed out waiting for the agent.", "err");
+            notify("Timed out waiting for the agent (120s). Check backend logs.", "err");
           }
         } catch (err) {
           stopPolling();
           setBusy(false);
           notify(`Polling failed: ${(err as Error).message}`, "err");
         }
-      }, 350);
+      }, POLL_INTERVAL);
     },
     [notify, refresh, refreshMarket, stopPolling],
   );
@@ -238,7 +251,7 @@ export function useEventra(pollMs = 4000) {
 
   return {
     status, portfolio, history, events, trades, decisions, templates,
-    activeRun, online, loading, error, busy, toasts,
+    activeRun, metrics, online, loading, error, busy, toasts,
     simulate, selectEvent, toggleKillSwitch, reset, syncEvents, notify, refresh,
   };
 }

@@ -211,3 +211,28 @@ export interface SystemStatus {
     last_decision_id: string | null;
   };
 }
+
+export interface PerformanceMetrics {
+  sharpe_ratio: number;
+  sortino_ratio: number;
+  max_drawdown: number;
+  max_drawdown_pct: number;
+  win_rate: number;
+  profit_factor: number;
+  total_trades: number;
+  winning_trades: number;
+  losing_trades: number;
+  total_realized_pnl: number;
+  avg_win: number;
+  avg_loss: number;
+  largest_win: number;
+  largest_loss: number;
+  total_fees: number;
+  total_slippage: number;
+  risk_violations: number;
+  decisions_total: number;
+  decisions_executed: number;
+  decisions_rejected: number;
+  paper_trading_days: number;
+  last_updated: string;
+}

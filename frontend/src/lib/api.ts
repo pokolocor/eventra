@@ -2,6 +2,7 @@ import type {
   DecisionRun,
   EquityPoint,
   MarketEvent,
+  PerformanceMetrics,
   PortfolioView,
   SystemStatus,
   TemplateGroup,
@@ -81,4 +82,5 @@ export const api = {
     request<{ symbol: string; decision_id: string | null; explanation: string }>(
       `/api/agent/explain/${encodeURIComponent(symbol)}`,
     ),
+  metrics: () => request<PerformanceMetrics>("/api/metrics"),
 };

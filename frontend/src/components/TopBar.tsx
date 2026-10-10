@@ -40,7 +40,7 @@ export default function TopBar({ status, online, onKillSwitch, onReset }: Props)
           {status ? `TICK ${status.market_tick}` : "TICK —"}
         </span>
         <span className={`badge ${online ? "border-[#1d5541] bg-[#0f3d2e] text-bull" : "border-[#5d222c] bg-[#3d1620] text-bear"}`}>
-          {online ? "LIVE" : "OFFLINE"}
+          {online ? "ONLINE" : "OFFLINE"}
         </span>
         <button
           type="button"

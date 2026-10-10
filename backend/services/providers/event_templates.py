@@ -79,14 +79,32 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "long-duration growth assets and pressuring risk appetite. Duration also suffers because the "
                     "terminal rate expectation moved higher."
                 ),
-                "impacts": [("QQQ", "negative", 82), ("SPY", "negative", 68), ("IWM", "negative", 74),
-                            ("BTC", "negative", 61), ("TLT", "negative", 70), ("GLD", "neutral", 44),
-                            ("JPM", "positive", 52)],
-                "actions": [("QQQ", "REDUCE", 10), ("BTC", "REDUCE", 5), ("IWM", "REDUCE", 6),
-                            ("TLT", "INCREASE", 5), ("GLD", "HOLD", 0)],
+                "impacts": [
+                    ("QQQ", "negative", 82),
+                    ("SPY", "negative", 68),
+                    ("IWM", "negative", 74),
+                    ("BTC", "negative", 61),
+                    ("TLT", "negative", 70),
+                    ("GLD", "neutral", 44),
+                    ("JPM", "positive", 52),
+                ],
+                "actions": [
+                    ("QQQ", "REDUCE", 10),
+                    ("BTC", "REDUCE", 5),
+                    ("IWM", "REDUCE", 6),
+                    ("TLT", "INCREASE", 5),
+                    ("GLD", "HOLD", 0),
+                ],
             },
-            price_shocks={"QQQ": -0.018, "SPY": -0.012, "IWM": -0.021, "BTC": -0.026, "TLT": -0.009,
-                          "GLD": 0.004, "JPM": 0.011},
+            price_shocks={
+                "QQQ": -0.018,
+                "SPY": -0.012,
+                "IWM": -0.021,
+                "BTC": -0.026,
+                "TLT": -0.009,
+                "GLD": 0.004,
+                "JPM": 0.011,
+            },
         ),
         EventTemplate(
             key="cpi_surprise_low",
@@ -115,14 +133,32 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "policy easing. Lower real rates support long-duration growth equities and crypto, while the "
                     "defensive bid fades."
                 ),
-                "impacts": [("QQQ", "positive", 86), ("SPY", "positive", 72), ("IWM", "positive", 78),
-                            ("TLT", "positive", 80), ("BTC", "positive", 66), ("GLD", "positive", 48),
-                            ("XLE", "negative", 40)],
-                "actions": [("QQQ", "INCREASE", 8), ("IWM", "INCREASE", 6), ("BTC", "INCREASE", 4),
-                            ("TLT", "INCREASE", 3), ("XLE", "REDUCE", 4)],
+                "impacts": [
+                    ("QQQ", "positive", 86),
+                    ("SPY", "positive", 72),
+                    ("IWM", "positive", 78),
+                    ("TLT", "positive", 80),
+                    ("BTC", "positive", 66),
+                    ("GLD", "positive", 48),
+                    ("XLE", "negative", 40),
+                ],
+                "actions": [
+                    ("QQQ", "INCREASE", 8),
+                    ("IWM", "INCREASE", 6),
+                    ("BTC", "INCREASE", 4),
+                    ("TLT", "INCREASE", 3),
+                    ("XLE", "REDUCE", 4),
+                ],
             },
-            price_shocks={"QQQ": 0.021, "SPY": 0.014, "IWM": 0.019, "TLT": 0.016, "BTC": 0.024, "GLD": 0.006,
-                          "XLE": -0.011},
+            price_shocks={
+                "QQQ": 0.021,
+                "SPY": 0.014,
+                "IWM": 0.019,
+                "TLT": 0.016,
+                "BTC": 0.024,
+                "GLD": 0.006,
+                "XLE": -0.011,
+            },
         ),
         EventTemplate(
             key="earnings_beat_nvda",
@@ -150,11 +186,26 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "A large beat-and-raise from the AI capex bellwether. Earnings revisions propagate through the "
                     "semiconductor complex and lift the index because of NVDA's weight in QQQ."
                 ),
-                "impacts": [("NVDA", "positive", 93), ("SOXX", "positive", 78), ("QQQ", "positive", 64),
-                            ("SPY", "positive", 41), ("MSFT", "positive", 46)],
-                "actions": [("NVDA", "INCREASE", 9), ("SOXX", "INCREASE", 5), ("QQQ", "INCREASE", 3)],
+                "impacts": [
+                    ("NVDA", "positive", 93),
+                    ("SOXX", "positive", 78),
+                    ("QQQ", "positive", 64),
+                    ("SPY", "positive", 41),
+                    ("MSFT", "positive", 46),
+                ],
+                "actions": [
+                    ("NVDA", "INCREASE", 9),
+                    ("SOXX", "INCREASE", 5),
+                    ("QQQ", "INCREASE", 3),
+                ],
             },
-            price_shocks={"NVDA": 0.062, "SOXX": 0.028, "QQQ": 0.013, "SPY": 0.007, "MSFT": 0.011},
+            price_shocks={
+                "NVDA": 0.062,
+                "SOXX": 0.028,
+                "QQQ": 0.013,
+                "SPY": 0.007,
+                "MSFT": 0.011,
+            },
         ),
         EventTemplate(
             key="earnings_miss_aapl",
@@ -182,9 +233,17 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "A mega-cap revenue miss with weak guidance is an index-level drag given AAPL's weight, and the "
                     "China weakness spreads to the wider hardware supply chain."
                 ),
-                "impacts": [("AAPL", "negative", 90), ("QQQ", "negative", 62), ("SPY", "negative", 44),
-                            ("SOXX", "negative", 47)],
-                "actions": [("AAPL", "REDUCE", 12), ("QQQ", "REDUCE", 5), ("SOXX", "REDUCE", 4)],
+                "impacts": [
+                    ("AAPL", "negative", 90),
+                    ("QQQ", "negative", 62),
+                    ("SPY", "negative", 44),
+                    ("SOXX", "negative", 47),
+                ],
+                "actions": [
+                    ("AAPL", "REDUCE", 12),
+                    ("QQQ", "REDUCE", 5),
+                    ("SOXX", "REDUCE", 4),
+                ],
             },
             price_shocks={"AAPL": -0.058, "QQQ": -0.012, "SPY": -0.008, "SOXX": -0.014},
         ),
@@ -214,12 +273,30 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "A supply-driven energy shock is stagflationary: it benefits producers and energy equities while "
                     "raising breakevens, which hurts duration and consumer-discretionary growth names."
                 ),
-                "impacts": [("USO", "positive", 91), ("XLE", "positive", 84), ("SPY", "negative", 58),
-                            ("QQQ", "negative", 66), ("TLT", "negative", 62), ("GLD", "positive", 57)],
-                "actions": [("XLE", "INCREASE", 7), ("USO", "INCREASE", 5), ("QQQ", "REDUCE", 6),
-                            ("GLD", "INCREASE", 3), ("TLT", "REDUCE", 4)],
+                "impacts": [
+                    ("USO", "positive", 91),
+                    ("XLE", "positive", 84),
+                    ("SPY", "negative", 58),
+                    ("QQQ", "negative", 66),
+                    ("TLT", "negative", 62),
+                    ("GLD", "positive", 57),
+                ],
+                "actions": [
+                    ("XLE", "INCREASE", 7),
+                    ("USO", "INCREASE", 5),
+                    ("QQQ", "REDUCE", 6),
+                    ("GLD", "INCREASE", 3),
+                    ("TLT", "REDUCE", 4),
+                ],
             },
-            price_shocks={"USO": 0.071, "XLE": 0.044, "SPY": -0.011, "QQQ": -0.016, "TLT": -0.013, "GLD": 0.012},
+            price_shocks={
+                "USO": 0.071,
+                "XLE": 0.044,
+                "SPY": -0.011,
+                "QQQ": -0.016,
+                "TLT": -0.013,
+                "GLD": 0.012,
+            },
         ),
         EventTemplate(
             key="geopolitical_escalation",
@@ -247,13 +324,31 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "A tail-risk geopolitical shock with an immediate transmission channel through energy supply and "
                     "shipping. Correlations converge in risk assets while gold and duration absorb the safe-haven bid."
                 ),
-                "impacts": [("GLD", "positive", 88), ("TLT", "positive", 71), ("USO", "positive", 83),
-                            ("SPY", "negative", 74), ("QQQ", "negative", 79), ("BTC", "negative", 52)],
-                "actions": [("QQQ", "REDUCE", 12), ("SPY", "REDUCE", 8), ("GLD", "INCREASE", 8),
-                            ("TLT", "INCREASE", 5), ("BTC", "REDUCE", 6)],
+                "impacts": [
+                    ("GLD", "positive", 88),
+                    ("TLT", "positive", 71),
+                    ("USO", "positive", 83),
+                    ("SPY", "negative", 74),
+                    ("QQQ", "negative", 79),
+                    ("BTC", "negative", 52),
+                ],
+                "actions": [
+                    ("QQQ", "REDUCE", 12),
+                    ("SPY", "REDUCE", 8),
+                    ("GLD", "INCREASE", 8),
+                    ("TLT", "INCREASE", 5),
+                    ("BTC", "REDUCE", 6),
+                ],
             },
-            price_shocks={"GLD": 0.026, "TLT": 0.014, "USO": 0.058, "SPY": -0.023, "QQQ": -0.029, "BTC": -0.031,
-                          "IWM": -0.027},
+            price_shocks={
+                "GLD": 0.026,
+                "TLT": 0.014,
+                "USO": 0.058,
+                "SPY": -0.023,
+                "QQQ": -0.029,
+                "BTC": -0.031,
+                "IWM": -0.027,
+            },
         ),
         EventTemplate(
             key="crypto_regulation_positive",
@@ -282,7 +377,11 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "channels. ETH has the larger marginal re-rating because the ETF approval was the binding "
                     "constraint; BTC benefits from the broader institutional bid."
                 ),
-                "impacts": [("ETH", "positive", 92), ("BTC", "positive", 81), ("QQQ", "positive", 34)],
+                "impacts": [
+                    ("ETH", "positive", 92),
+                    ("BTC", "positive", 81),
+                    ("QQQ", "positive", 34),
+                ],
                 "actions": [("ETH", "INCREASE", 7), ("BTC", "INCREASE", 5)],
             },
             price_shocks={"ETH": 0.082, "BTC": 0.047, "QQQ": 0.004},
@@ -313,9 +412,17 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "Combined regulatory tightening and an exchange liquidity event is the most damaging pairing for "
                     "digital assets because it attacks both the funding rail and counterparty trust at once."
                 ),
-                "impacts": [("BTC", "negative", 89), ("ETH", "negative", 91), ("QQQ", "negative", 28),
-                            ("GLD", "positive", 41)],
-                "actions": [("BTC", "REDUCE", 14), ("ETH", "REDUCE", 16), ("GLD", "INCREASE", 4)],
+                "impacts": [
+                    ("BTC", "negative", 89),
+                    ("ETH", "negative", 91),
+                    ("QQQ", "negative", 28),
+                    ("GLD", "positive", 41),
+                ],
+                "actions": [
+                    ("BTC", "REDUCE", 14),
+                    ("ETH", "REDUCE", 16),
+                    ("GLD", "INCREASE", 4),
+                ],
             },
             price_shocks={"BTC": -0.064, "ETH": -0.081, "QQQ": -0.006, "GLD": 0.008},
         ),
@@ -345,12 +452,27 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "Stronger growth supports cyclicals and financials, but a hot print delays easing and hurts "
                     "duration. The right expression is a rotation rather than a blanket risk-on add."
                 ),
-                "impacts": [("SPY", "positive", 61), ("IWM", "positive", 68), ("JPM", "positive", 72),
-                            ("QQQ", "positive", 44), ("TLT", "negative", 66)],
-                "actions": [("JPM", "INCREASE", 6), ("IWM", "INCREASE", 5), ("TLT", "REDUCE", 7),
-                            ("QQQ", "INCREASE", 2)],
+                "impacts": [
+                    ("SPY", "positive", 61),
+                    ("IWM", "positive", 68),
+                    ("JPM", "positive", 72),
+                    ("QQQ", "positive", 44),
+                    ("TLT", "negative", 66),
+                ],
+                "actions": [
+                    ("JPM", "INCREASE", 6),
+                    ("IWM", "INCREASE", 5),
+                    ("TLT", "REDUCE", 7),
+                    ("QQQ", "INCREASE", 2),
+                ],
             },
-            price_shocks={"SPY": 0.008, "IWM": 0.014, "JPM": 0.017, "QQQ": 0.005, "TLT": -0.012},
+            price_shocks={
+                "SPY": 0.008,
+                "IWM": 0.014,
+                "JPM": 0.017,
+                "QQQ": 0.005,
+                "TLT": -0.012,
+            },
         ),
         EventTemplate(
             key="jobs_report_hot",
@@ -377,11 +499,29 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
                     "A hot labour market with re-accelerating wages removes the disinflation argument for easing. "
                     "Higher-for-longer policy compresses equity multiples and hurts long duration."
                 ),
-                "impacts": [("TLT", "negative", 79), ("QQQ", "negative", 70), ("SPY", "negative", 58),
-                            ("IWM", "negative", 64), ("GLD", "negative", 46), ("JPM", "positive", 49)],
-                "actions": [("TLT", "REDUCE", 9), ("QQQ", "REDUCE", 7), ("IWM", "REDUCE", 5), ("JPM", "INCREASE", 4)],
+                "impacts": [
+                    ("TLT", "negative", 79),
+                    ("QQQ", "negative", 70),
+                    ("SPY", "negative", 58),
+                    ("IWM", "negative", 64),
+                    ("GLD", "negative", 46),
+                    ("JPM", "positive", 49),
+                ],
+                "actions": [
+                    ("TLT", "REDUCE", 9),
+                    ("QQQ", "REDUCE", 7),
+                    ("IWM", "REDUCE", 5),
+                    ("JPM", "INCREASE", 4),
+                ],
             },
-            price_shocks={"TLT": -0.018, "QQQ": -0.015, "SPY": -0.010, "IWM": -0.016, "GLD": -0.007, "JPM": 0.009},
+            price_shocks={
+                "TLT": -0.018,
+                "QQQ": -0.015,
+                "SPY": -0.010,
+                "IWM": -0.016,
+                "GLD": -0.007,
+                "JPM": 0.009,
+            },
         ),
         EventTemplate(
             key="illiquid_meme_pump",
@@ -444,6 +584,192 @@ EVENT_TEMPLATES: Dict[str, EventTemplate] = {
             },
             price_shocks={},
         ),
+        # --- rToken / 7x24 Tokenized US Stock Events ---
+        EventTemplate(
+            key="rtoken_weekend_geopolitical",
+            label="rToken: Weekend geopolitical shock (7x24 pricing)",
+            group="rToken 7x24",
+            category="geopolitical",
+            importance="critical",
+            source="Reuters / On-chain oracle",
+            title="Weekend geopolitical escalation: rToken prices US equities 2.3% lower while NYSE is closed",
+            summary=(
+                "A military escalation occurred at 03:17 UTC on Saturday. Tokenized US stocks (rTokens) immediately "
+                "repriced 2.3% lower on-chain while traditional US markets remained closed. The rToken NAV premium "
+                "widened to 1.8% as arbitrageurs could not redeem until Monday's open. This is the exact 7x24 "
+                "pricing gap the Eventra agent is designed to exploit."
+            ),
+            affected_assets=("AAPL", "MSFT", "QQQ", "SPY", "BTC"),
+            description="Weekend event: rTokens price it in, US cash markets cannot react until Monday.",
+            expected_analysis={
+                "event_type": "geopolitical",
+                "sentiment": "bearish",
+                "market_regime": "risk_off",
+                "confidence": 0.85,
+                "time_horizon": "1-5 days",
+                "recommended_action": "hedge",
+                "reasoning_summary": (
+                    "Tokenized US stocks are pricing a geopolitical shock 2.3% lower on a weekend when NYSE is closed. "
+                    "This creates a 7x24 pricing advantage: the agent can reduce rToken exposure now and wait for "
+                    "the cash market to catch up on Monday. The NAV premium widening to 1.8% also presents a "
+                    "short-term mean-reversion opportunity if the shock fades over the weekend."
+                ),
+                "impacts": [
+                    ("QQQ", "negative", 78),
+                    ("SPY", "negative", 72),
+                    ("AAPL", "negative", 68),
+                    ("MSFT", "negative", 65),
+                    ("BTC", "negative", 55),
+                    ("GLD", "positive", 74),
+                ],
+                "actions": [
+                    ("QQQ", "REDUCE", 10),
+                    ("SPY", "REDUCE", 8),
+                    ("GLD", "INCREASE", 6),
+                    ("BTC", "REDUCE", 4),
+                ],
+            },
+            price_shocks={
+                "QQQ": -0.023,
+                "SPY": -0.020,
+                "AAPL": -0.019,
+                "MSFT": -0.018,
+                "BTC": -0.028,
+                "GLD": 0.018,
+            },
+        ),
+        EventTemplate(
+            key="rtoken_earnings_after_hours",
+            label="rToken: Earnings beat priced on-chain before market open",
+            group="rToken 7x24",
+            category="earnings",
+            importance="high",
+            source="Company IR / On-chain oracle",
+            title="NVIDIA earnings beat: rToken surges 5.8% at 02:00 UTC, 7 hours before Nasdaq open",
+            summary=(
+                "NVIDIA reported earnings at 21:00 UTC (after US close). The rToken immediately surged 5.8% on-chain "
+                "while Nasdaq remains closed for 7 more hours. The tokenized NAV premium hit 3.2%. The Eventra agent "
+                "detected the beat, analyzed the guidance raise, and increased rToken exposure at 21:04 UTC - capturing "
+                "the full 7x24 move before any traditional market participant could react."
+            ),
+            affected_assets=("NVDA", "SOXX", "QQQ", "SPY"),
+            description="After-hours earnings: rToken captures the move 7 hours before the cash market opens.",
+            expected_analysis={
+                "event_type": "earnings",
+                "sentiment": "bullish",
+                "market_regime": "risk_on",
+                "confidence": 0.92,
+                "time_horizon": "1-5 days",
+                "recommended_action": "increase_risk",
+                "reasoning_summary": (
+                    "NVIDIA beat earnings and raised guidance. The rToken is already +5.8% on-chain while Nasdaq is "
+                    "closed. The agent can increase rToken exposure now to capture the full move, then when Nasdaq "
+                    "opens, the cash market will likely gap up to close the NAV discount. This is the 7x24 alpha: "
+                    "the agent trades on information 7 hours before traditional markets can react."
+                ),
+                "impacts": [
+                    ("NVDA", "positive", 94),
+                    ("SOXX", "positive", 76),
+                    ("QQQ", "positive", 62),
+                    ("SPY", "positive", 38),
+                ],
+                "actions": [
+                    ("NVDA", "INCREASE", 10),
+                    ("SOXX", "INCREASE", 5),
+                    ("QQQ", "INCREASE", 3),
+                ],
+            },
+            price_shocks={"NVDA": 0.058, "SOXX": 0.026, "QQQ": 0.014, "SPY": 0.007},
+        ),
+        EventTemplate(
+            key="rtoken_nav_arbitrage",
+            label="rToken: NAV premium arbitrage opportunity",
+            group="rToken 7x24",
+            category="crypto",
+            importance="high",
+            source="On-chain oracle / DEX aggregator",
+            title="rToken AAPL trading at 2.4% NAV premium: mint-redeem arbitrage available",
+            summary=(
+                "Tokenized Apple (rAAPL) is trading at $198.50 on-chain while the underlying AAPL closed at $193.80. "
+                "The 2.4% NAV premium exceeds the 1.2% threshold for profitable mint-redeem arbitrage. The agent can "
+                "mint new rTokens at NAV ($193.80) and sell them on the DEX at $198.50, capturing the spread minus "
+                "gas and minting fees. This opportunity exists because weekend retail demand is bidding rTokens above "
+                "NAV while authorized participants cannot redeem until Monday."
+            ),
+            affected_assets=("AAPL", "QQQ", "SPY"),
+            description="NAV premium arbitrage: mint at NAV, sell on DEX, capture the spread.",
+            expected_analysis={
+                "event_type": "crypto_regulation",
+                "sentiment": "bullish",
+                "market_regime": "neutral",
+                "confidence": 0.88,
+                "time_horizon": "intraday",
+                "recommended_action": "increase_risk",
+                "reasoning_summary": (
+                    "rAAPL is trading at a 2.4% NAV premium. The arbitrage is straightforward: mint new rTokens at "
+                    "$193.80 NAV and sell on the DEX at $198.50. After gas (~$15) and minting fees (0.3%), the net "
+                    "profit is ~$4.40 per token (2.2% return). This opportunity will close when authorized participants "
+                    "can redeem on Monday, so the agent must act within the 7x24 window."
+                ),
+                "impacts": [("AAPL", "positive", 45), ("QQQ", "positive", 22)],
+                "actions": [("AAPL", "INCREASE", 8)],
+            },
+            price_shocks={"AAPL": 0.024},
+        ),
+        EventTemplate(
+            key="rtoken_macro_weekend",
+            label="rToken: Fed announcement on weekend (7x24 repricing)",
+            group="rToken 7x24",
+            category="central_bank",
+            importance="critical",
+            source="Federal Reserve / On-chain oracle",
+            title="Emergency Fed rate cut on Sunday: rTokens rally 3.1% while US markets are closed",
+            summary=(
+                "The Federal Reserve announced an emergency 50bp rate cut at 14:00 UTC on Sunday, citing financial "
+                "stability concerns. Tokenized US stocks immediately rallied 3.1% on-chain while NYSE remains closed "
+                "until Monday 14:30 UTC. The agent detected the announcement, analyzed the dovish surprise, and "
+                "increased rToken exposure within 4 minutes - capturing the full 7x24 move before any traditional "
+                "market participant could react. Duration tokens (TLT equivalent) also rallied 2.8%."
+            ),
+            affected_assets=("QQQ", "SPY", "IWM", "TLT", "GLD", "BTC"),
+            description="Emergency weekend Fed action: rTokens price the cut 24+ hours before cash markets open.",
+            expected_analysis={
+                "event_type": "monetary_policy",
+                "sentiment": "bullish",
+                "market_regime": "risk_on",
+                "confidence": 0.90,
+                "time_horizon": "1-5 days",
+                "recommended_action": "increase_risk",
+                "reasoning_summary": (
+                    "Emergency 50bp cut on a Sunday is a massive dovish surprise. rTokens are already +3.1% on-chain "
+                    "while NYSE is closed for 24 hours. The agent can increase rToken exposure now to capture the full "
+                    "move. When NYSE opens Monday, cash markets will likely gap up 2-3% to close the NAV discount. "
+                    "This is peak 7x24 alpha: the agent trades on emergency policy 24 hours before traditional markets."
+                ),
+                "impacts": [
+                    ("QQQ", "positive", 85),
+                    ("SPY", "positive", 78),
+                    ("IWM", "positive", 82),
+                    ("TLT", "positive", 76),
+                    ("GLD", "positive", 58),
+                    ("BTC", "positive", 64),
+                ],
+                "actions": [
+                    ("QQQ", "INCREASE", 10),
+                    ("IWM", "INCREASE", 8),
+                    ("TLT", "INCREASE", 6),
+                    ("BTC", "INCREASE", 4),
+                ],
+            },
+            price_shocks={
+                "QQQ": 0.031,
+                "SPY": 0.028,
+                "IWM": 0.033,
+                "TLT": 0.028,
+                "GLD": 0.016,
+                "BTC": 0.024,
+            },
+        ),
     ]
 }
 
@@ -461,6 +787,11 @@ TEMPLATE_ORDER: List[str] = [
     "jobs_report_hot",
     "illiquid_meme_pump",
     "low_confidence_rumour",
+    # rToken 7x24 events
+    "rtoken_weekend_geopolitical",
+    "rtoken_earnings_after_hours",
+    "rtoken_nav_arbitrage",
+    "rtoken_macro_weekend",
 ]
 
 
@@ -608,5 +939,47 @@ SEEDED_EVENTS: List[Dict[str, Any]] = [
             "session."
         ),
         "affected_assets": ["JPM", "SPY"],
+    },
+    # rToken / 7x24 seeded events
+    {
+        "minutes_ago": 15,
+        "title": "rToken SPY trades at 0.8% NAV premium on weekend retail demand",
+        "source": "On-chain oracle",
+        "category": "crypto",
+        "importance": "medium",
+        "summary": (
+            "Tokenized S&P 500 (rSPY) is trading at $582.40 on-chain while the underlying SPY closed at $577.60. "
+            "The 0.8% NAV premium reflects weekend retail demand for US equity exposure while NYSE is closed. "
+            "Arbitrage is constrained because authorized participants cannot redeem until Monday's open."
+        ),
+        "affected_assets": ["SPY", "QQQ"],
+        "is_simulated": True,
+    },
+    {
+        "minutes_ago": 95,
+        "title": "rToken BTC and ETH outperform spot by 1.2% on weekend flows",
+        "source": "DEX aggregator",
+        "category": "crypto",
+        "importance": "low",
+        "summary": (
+            "Tokenized crypto assets are trading at a slight premium to spot as weekend DeFi yields attract flows. "
+            "The premium is within normal bounds and does not present arbitrage opportunities after gas costs."
+        ),
+        "affected_assets": ["BTC", "ETH"],
+        "is_simulated": True,
+    },
+    {
+        "minutes_ago": 280,
+        "title": "Tokenized US stocks see record $47m weekend volume",
+        "source": "On-chain analytics",
+        "category": "crypto",
+        "importance": "medium",
+        "summary": (
+            "rToken trading volume hit $47.2m over the weekend, the highest since launch. The activity is concentrated "
+            "in rQQQ and rAAPL, suggesting institutional interest in 7x24 US equity exposure. This validates the "
+            "Eventra agent's core thesis: macro events happen on weekends while prices keep moving on-chain."
+        ),
+        "affected_assets": ["QQQ", "AAPL", "SPY"],
+        "is_simulated": True,
     },
 ]

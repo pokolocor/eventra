@@ -5,6 +5,7 @@ import DecisionTimeline from "@/components/DecisionTimeline";
 import EventFeed from "@/components/EventFeed";
 import Explainability from "@/components/Explainability";
 import KpiStrip from "@/components/KpiStrip";
+import PerformanceMetrics from "@/components/PerformanceMetrics";
 import PortfolioChart from "@/components/PortfolioChart";
 import PositionsTable from "@/components/PositionsTable";
 import SimulatePanel from "@/components/SimulatePanel";
@@ -27,6 +28,7 @@ export default function Page() {
 
       <main className="mx-auto flex max-w-[1800px] flex-col gap-3.5 px-4 py-3.5 pb-12">
         <KpiStrip portfolio={agent.portfolio} />
+        <PerformanceMetrics metrics={agent.metrics} />
 
         <section className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(320px,1fr)_minmax(430px,1.35fr)_minmax(300px,1fr)]">
           <EventFeed
