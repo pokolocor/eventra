@@ -285,10 +285,18 @@ class GDELTNewsProvider(NewsProvider):
         self, limit: int = 25, since: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
         # Query for recent financial/economic news
+        from urllib.parse import urlencode
+
         query = "finance OR economy OR market OR fed OR inflation OR earnings"
-        params = (
-            f"query={query}&mode=artlist&format=json&maxrecords={min(limit, 50)}"
-            f"&timespan=1d&sort=datedesc"
+        params = urlencode(
+            {
+                "query": query,
+                "mode": "artlist",
+                "format": "json",
+                "maxrecords": min(limit, 50),
+                "timespan": "1d",
+                "sort": "datedesc",
+            }
         )
         url = f"{self.BASE_URL}?{params}"
 
