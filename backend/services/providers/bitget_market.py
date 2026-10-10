@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class BitgetMarketData:
@@ -32,8 +35,12 @@ class BitgetMarketData:
                         if isinstance(data["data"], list)
                         else data["data"]
                     )
-        except Exception:
-            pass
+                else:
+                    logger.warning(
+                        f"Bitget API error for {symbol}: {data.get('msg', 'Unknown error')}"
+                    )
+        except Exception as e:
+            logger.error(f"Failed to fetch ticker for {symbol}: {e}")
         return None
 
     def get_all_tickers(self) -> List[Dict[str, Any]]:
@@ -66,8 +73,12 @@ class BitgetMarketData:
                         if isinstance(data["data"], list)
                         else data["data"]
                     )
-        except Exception:
-            pass
+                else:
+                    logger.warning(
+                        f"Bitget funding rate error for {symbol}: {data.get('msg', 'Unknown error')}"
+                    )
+        except Exception as e:
+            logger.error(f"Failed to fetch funding rate for {symbol}: {e}")
         return None
 
     def get_orderbook(self, symbol: str, limit: int = 15) -> Optional[Dict[str, Any]]:
