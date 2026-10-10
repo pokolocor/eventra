@@ -60,6 +60,27 @@ The Next.js dev server proxies `/api/*` to the backend (see
 `frontend/next.config.mjs`), so the browser never makes a cross-origin call and
 never sees a secret.
 
+### Bitget Demo Integration
+
+Eventra integrates with **Bitget Demo Trading** for the Bitget AI Base Camp Hackathon.
+When configured, all paper trades are mirrored to your Bitget Demo account.
+
+```bash
+# Add to backend/.env
+BITGET_API_KEY=your_bitget_api_key
+BITGET_API_SECRET=your_bitget_api_secret
+BITGET_PASSPHRASE=your_bitget_passphrase
+```
+
+To get Bitget Demo API keys:
+1. Log in to [Bitget](https://www.bitget.com/)
+2. Go to **API Management** → Create API Key
+3. Select **Demo Trading** mode (not live trading)
+4. Copy the API Key, Secret, and Passphrase to your `.env` file
+
+The dashboard shows a **BITGET DEMO** badge in the top bar when configured.
+All trades executed by Eventra are automatically mirrored to your Bitget Demo account.
+
 ### Tests
 
 ```bash

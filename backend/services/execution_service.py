@@ -3,6 +3,9 @@
 Converts risk-approved actions into simulated fills. It is the only place that
 mutates the portfolio, and it refuses to run when the kill switch is engaged.
 There is no live-broker code path in this project: paper trading only.
+
+When Bitget is configured, trades are also mirrored to Bitget Demo for
+hackathon submission purposes.
 """
 
 from __future__ import annotations
@@ -20,12 +23,15 @@ from backend.models.domain import (
     TradeAction,
     TradeSide,
 )
+from backend.observability import get_logger
 from backend.services.portfolio_service import (
     InsufficientFundsError,
     InsufficientPositionError,
     PortfolioService,
 )
 from backend.services.providers.market_data import MarketDataProvider
+
+logger = get_logger("execution")
 
 FEE_BPS = 0.5
 BASE_SLIPPAGE = 0.0002
@@ -45,11 +51,13 @@ class ExecutionService:
         market: MarketDataProvider,
         repository: Repository,
         settings: Settings,
+        bitget: Optional[Any] = None,
     ) -> None:
         self.portfolio = portfolio
         self.market = market
         self.repository = repository
         self.settings = settings
+        self.bitget = bitget
 
     # --- market ---------------------------------------------------------
     def advance_market(self, shocks: Optional[Dict[str, float]] = None) -> int:
@@ -69,19 +77,27 @@ class ExecutionService:
             raise KillSwitchEngagedError("Kill switch engaged - execution refused.")
         if risk.status == RiskStatus.REJECTED:
             self.repository.audit(
-                "execution_service", "execution_skipped", f"decision={decision_id} risk=REJECTED"
+                "execution_service",
+                "execution_skipped",
+                f"decision={decision_id} risk=REJECTED",
             )
             return []
         if not self.settings.paper_trading_only:
             # Hard guarantee: Eventra never routes to a live venue.
             raise RuntimeError("Live trading is permanently disabled in Eventra.")
 
-        impact_by_symbol = {asset.symbol: asset.impact_score for asset in signal.affected_assets}
+        impact_by_symbol = {
+            asset.symbol: asset.impact_score for asset in signal.affected_assets
+        }
         trades: List[Trade] = []
 
         for proposal in risk.approved_actions:
             trade = self._execute_one(
-                proposal, signal, decision_id, event_id, impact_by_symbol.get(proposal.symbol, 50)
+                proposal,
+                signal,
+                decision_id,
+                event_id,
+                impact_by_symbol.get(proposal.symbol, 50),
             )
             if trade is not None:
                 trades.append(trade)
@@ -92,7 +108,47 @@ class ExecutionService:
                 "paper_trades_executed",
                 f"decision={decision_id} count={len(trades)} symbols={[t.symbol for t in trades]}",
             )
+            # Mirror trades to Bitget Demo if configured
+            self._mirror_to_bitget(trades, decision_id)
         return trades
+
+    def _mirror_to_bitget(self, trades: List[Trade], decision_id: str) -> None:
+        """Mirror executed trades to Bitget Demo for hackathon submission."""
+        if self.bitget is None:
+            return
+
+        for trade in trades:
+            try:
+                self.bitget.place_order(
+                    symbol=trade.symbol,
+                    side=trade.side,
+                    size=trade.quantity,
+                    price=trade.price,
+                    order_type="limit",
+                )
+                logger.info(
+                    "bitget_mirror_success",
+                    extra={
+                        "extra_fields": {
+                            "trade_id": trade.id,
+                            "symbol": trade.symbol,
+                            "side": trade.side.value,
+                            "decision_id": decision_id,
+                        }
+                    },
+                )
+            except Exception as exc:
+                # Bitget mirror is best-effort; don't fail the trade
+                logger.warning(
+                    "bitget_mirror_failed",
+                    extra={
+                        "extra_fields": {
+                            "trade_id": trade.id,
+                            "symbol": trade.symbol,
+                            "error": str(exc),
+                        }
+                    },
+                )
 
     def _execute_one(
         self,
@@ -108,14 +164,24 @@ class ExecutionService:
             return None
 
         snapshot = self.portfolio.snapshot(persist=False)
-        notional = self.portfolio.target_notional_for(symbol, proposal.action, proposal.percentage, snapshot)
+        notional = self.portfolio.target_notional_for(
+            symbol, proposal.action, proposal.percentage, snapshot
+        )
         if notional <= 1.0:
             return None
 
-        participation = (notional / quote.avg_daily_volume_usd) if quote.avg_daily_volume_usd else 0.0
+        participation = (
+            (notional / quote.avg_daily_volume_usd)
+            if quote.avg_daily_volume_usd
+            else 0.0
+        )
         slippage = min(MAX_SLIPPAGE, BASE_SLIPPAGE + participation * 0.35)
         side = TradeSide.BUY if proposal.action in BUY_ACTIONS else TradeSide.SELL
-        fill_price = quote.price * (1 + slippage) if side == TradeSide.BUY else quote.price * (1 - slippage)
+        fill_price = (
+            quote.price * (1 + slippage)
+            if side == TradeSide.BUY
+            else quote.price * (1 - slippage)
+        )
         quantity = notional / fill_price
 
         position = snapshot.positions and next(
@@ -128,7 +194,9 @@ class ExecutionService:
             return None
 
         fee = (quantity * fill_price) * (FEE_BPS / 10_000.0)
-        conviction = round(min(0.99, (signal.confidence * 0.7) + (impact_score / 100.0) * 0.3), 4)
+        conviction = round(
+            min(0.99, (signal.confidence * 0.7) + (impact_score / 100.0) * 0.3), 4
+        )
         reason = (
             f"{proposal.action.value} {symbol} by {proposal.percentage:.1f}% - "
             f"{signal.recommended_action.value} on a {signal.sentiment.value} / "

@@ -82,3 +82,9 @@ def quotes() -> List[Dict[str, Any]]:
 def metrics() -> Dict[str, Any]:
     """Performance metrics for hackathon submission (Sharpe, drawdown, win rate, etc.)."""
     return handlers.performance_metrics(registry())
+
+
+@router.get("/api/bitget/status", response_model=None)
+def bitget_status() -> Dict[str, Any]:
+    """Bitget demo trading connection status and account info."""
+    return handlers.bitget_status(registry())

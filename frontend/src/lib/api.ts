@@ -1,4 +1,5 @@
 import type {
+  BitgetStatus,
   DecisionRun,
   EquityPoint,
   MarketEvent,
@@ -83,4 +84,5 @@ export const api = {
       `/api/agent/explain/${encodeURIComponent(symbol)}`,
     ),
   metrics: () => request<PerformanceMetrics>("/api/metrics"),
+  bitgetStatus: () => request<BitgetStatus>("/api/bitget/status"),
 };

@@ -201,6 +201,7 @@ export interface SystemStatus {
   kill_switch: boolean;
   market_tick: number;
   llm: { provider: string; model: string; configured: boolean; base_url: string };
+  bitget: { configured: boolean; mode: string };
   database: { url: string; backend: string };
   risk_limits: Record<string, number>;
   counts: { events: number; decisions: number; trades: number; positions: number };
@@ -210,6 +211,16 @@ export interface SystemStatus {
     decisions_rejected: number;
     last_decision_id: string | null;
   };
+}
+
+export interface BitgetStatus {
+  status: "connected" | "not_configured" | "error";
+  message?: string;
+  total_balance?: number;
+  available_balance?: number;
+  positions_count?: number;
+  demo_mode: boolean;
+  error?: string;
 }
 
 export interface PerformanceMetrics {

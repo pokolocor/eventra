@@ -19,13 +19,23 @@ from backend.services.demo_llm import DemoLLMService
 from backend.services.event_service import EventService
 from backend.services.execution_service import ExecutionService
 from backend.services.portfolio_service import PortfolioService
-from backend.services.providers.market_data import DemoMarketDataProvider, MarketDataProvider
-from backend.services.providers.news import DemoNewsProvider, HttpNewsProvider, NewsProvider
+from backend.services.providers.bitget import BitgetDemoService
+from backend.services.providers.market_data import (
+    DemoMarketDataProvider,
+    MarketDataProvider,
+)
+from backend.services.providers.news import (
+    DemoNewsProvider,
+    HttpNewsProvider,
+    NewsProvider,
+)
 from backend.services.qwen_service import QwenService
 from backend.services.risk_engine import RiskEngine
 
 
-def build_market_provider(settings: Settings, repository: Repository) -> MarketDataProvider:
+def build_market_provider(
+    settings: Settings, repository: Repository
+) -> MarketDataProvider:
     provider = DemoMarketDataProvider()
     stored = int(repository.load_system().market_tick or 0)
     # Persisted state wins; `MARKET_TICK` is only the cold-start position.
@@ -47,7 +57,11 @@ def build_news_provider(settings: Settings) -> NewsProvider:
 class ServiceRegistry:
     """Owns the Eventra object graph."""
 
-    def __init__(self, settings: Optional[Settings] = None, repository: Optional[Repository] = None) -> None:
+    def __init__(
+        self,
+        settings: Optional[Settings] = None,
+        repository: Optional[Repository] = None,
+    ) -> None:
         self.settings = settings or load_settings()
         self.repository = repository or create_repository(self.settings)
         self.guard = Guard(self.settings)
@@ -56,8 +70,17 @@ class ServiceRegistry:
 
         self.events = EventService(self.repository, self.news)
         self.portfolio = PortfolioService(self.repository, self.market, self.settings)
-        self.risk_engine = RiskEngine(self.settings, self.portfolio, self.market, self.repository)
-        self.execution = ExecutionService(self.portfolio, self.market, self.repository, self.settings)
+        self.risk_engine = RiskEngine(
+            self.settings, self.portfolio, self.market, self.repository
+        )
+        self.bitget = BitgetDemoService(self.settings)
+        self.execution = ExecutionService(
+            self.portfolio,
+            self.market,
+            self.repository,
+            self.settings,
+            bitget=self.bitget,
+        )
 
         self.qwen = QwenService(self.settings)
         self.demo_llm = DemoLLMService()

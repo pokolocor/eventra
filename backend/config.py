@@ -113,7 +113,9 @@ def _resolve_environment() -> str:
 
     explicit = _first_env("EVENTRA_ENV", "ENVIRONMENT", "APP_ENV")
     if explicit:
-        return "production" if explicit.lower() in PRODUCTION_WORDS else explicit.lower()
+        return (
+            "production" if explicit.lower() in PRODUCTION_WORDS else explicit.lower()
+        )
     if _get_bool("RENDER", False) or _first_env("RENDER_SERVICE_ID"):
         return "production"
     return "development"
@@ -162,7 +164,9 @@ class RiskLimits:
             min_adv_usd=_get_float("EVENTRA_MIN_ADV_USD", 250_000_000.0),
             max_trade_adv_pct=_get_float("EVENTRA_MAX_TRADE_ADV_PCT", 2.0),
             max_annualized_vol=_get_float("EVENTRA_MAX_ANNUALIZED_VOL", 0.90),
-            duplicate_signal_cooldown_minutes=_get_int("EVENTRA_DUPLICATE_COOLDOWN_MIN", 30),
+            duplicate_signal_cooldown_minutes=_get_int(
+                "EVENTRA_DUPLICATE_COOLDOWN_MIN", 30
+            ),
             max_actions_per_decision=_get_int("EVENTRA_MAX_ACTIONS_PER_DECISION", 6),
         )
 
@@ -180,6 +184,11 @@ class Settings:
     qwen_timeout_seconds: float = 30.0
     qwen_max_retries: int = 2
     qwen_temperature: float = 0.2
+
+    # --- Bitget Demo Trading --------------------------------------------
+    bitget_api_key: str = ""
+    bitget_api_secret: str = ""
+    bitget_passphrase: str = ""
 
     # --- Runtime mode ---------------------------------------------------
     demo_mode: bool = True
@@ -223,6 +232,11 @@ class Settings:
         return bool(self.qwen_api_key.strip())
 
     @property
+    def bitget_available(self) -> bool:
+        """True when Bitget API keys are configured."""
+        return bool(self.bitget_api_key.strip() and self.bitget_api_secret.strip())
+
+    @property
     def llm_mode(self) -> str:
         """`qwen` when a real key is configured, otherwise `demo`."""
 
@@ -262,7 +276,9 @@ class Settings:
     def store_label(self) -> str:
         """Human label for the STORE badge, derived from configuration."""
 
-        return _db_backend(self.database_url) if self.database_configured else "ephemeral"
+        return (
+            _db_backend(self.database_url) if self.database_configured else "ephemeral"
+        )
 
     def public_status(self) -> Dict[str, Any]:
         return {
@@ -276,6 +292,10 @@ class Settings:
                 "model": self.qwen_model,
                 "configured": self.qwen_available,
                 "base_url": self.qwen_base_url,
+            },
+            "bitget": {
+                "configured": self.bitget_available,
+                "mode": "demo",
             },
             "database": {
                 "url": _redact(self.database_url),
@@ -341,9 +361,14 @@ def load_settings(env_file: Path | None = None) -> Settings:
             or "https://dashscope.aliyuncs.com/compatible-mode/v1"
         ).rstrip("/"),
         qwen_model=os.environ.get("QWEN_MODEL", "qwen-plus").strip() or "qwen-plus",
-        qwen_timeout_seconds=_first_float(("QWEN_TIMEOUT_SECONDS", "LLM_TIMEOUT_SECONDS"), 15.0),
+        qwen_timeout_seconds=_first_float(
+            ("QWEN_TIMEOUT_SECONDS", "LLM_TIMEOUT_SECONDS"), 15.0
+        ),
         qwen_max_retries=_first_int(("QWEN_MAX_RETRIES", "LLM_MAX_RETRIES"), 2),
         qwen_temperature=_get_float("QWEN_TEMPERATURE", 0.2),
+        bitget_api_key=os.environ.get("BITGET_API_KEY", "").strip(),
+        bitget_api_secret=os.environ.get("BITGET_API_SECRET", "").strip(),
+        bitget_passphrase=os.environ.get("BITGET_PASSPHRASE", "").strip(),
         demo_mode=_resolve_demo_mode(),
         # Hard guarantee. Paper trading only, always.
         paper_trading_only=_get_bool("EVENTRA_PAPER_TRADING_ONLY", True),
@@ -354,7 +379,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         cors_origins=_resolve_cors_origins(),
         admin_token=_first_env("ADMIN_TOKEN", "EVENTRA_ADMIN_TOKEN") or "",
         environment=_resolve_environment(),
-        allow_demo_reset=_first_bool(("ALLOW_DEMO_RESET", "EVENTRA_ALLOW_DEMO_RESET"), False),
+        allow_demo_reset=_first_bool(
+            ("ALLOW_DEMO_RESET", "EVENTRA_ALLOW_DEMO_RESET"), False
+        ),
         agent_rate_limit_per_minute=_first_int(
             ("EVENTRA_AGENT_RATE_LIMIT_PER_MIN", "AGENT_RATE_LIMIT_PER_MIN"), 10
         ),

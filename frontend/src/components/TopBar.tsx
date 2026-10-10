@@ -10,6 +10,7 @@ interface Props {
 export default function TopBar({ status, online, onKillSwitch, onReset }: Props) {
   const kill = status?.kill_switch ?? false;
   const llm = status?.llm;
+  const bitget = status?.bitget;
   return (
     <header className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-4 border-b border-edge bg-ink-950/92 px-4 py-2.5 backdrop-blur">
       <div className="flex items-center gap-3">
@@ -34,6 +35,13 @@ export default function TopBar({ status, online, onKillSwitch, onReset }: Props)
           }`}
         >
           LLM {llm?.provider === "qwen" ? `QWEN ${llm.model}` : "DEMO MOCK"}
+        </span>
+        <span
+          className={`badge ${
+            bitget?.configured ? "border-[#1d5541] bg-[#0f3d2e] text-bull" : "border-[#5a4415] bg-[#3d2c0c] text-warn"
+          }`}
+        >
+          BITGET {bitget?.configured ? "DEMO" : "NOT SET"}
         </span>
         <span className="badge">STORE {String(status?.database?.backend ?? "?").toUpperCase()}</span>
         <span className="badge">

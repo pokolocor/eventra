@@ -429,3 +429,9 @@ def performance_metrics(registry: ServiceRegistry) -> Dict[str, Any]:
 
     metrics = MetricsService(registry.repository)
     return metrics.compute_all()
+
+
+# --- bitget -------------------------------------------------------------
+def bitget_status(registry: ServiceRegistry) -> Dict[str, Any]:
+    """Return Bitget demo trading status and account info."""
+    return registry.bitget.health_check()
