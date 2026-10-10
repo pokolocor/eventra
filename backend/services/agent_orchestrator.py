@@ -71,7 +71,9 @@ class AgentOrchestrator:
         on_complete: Optional[Callable[[], None]] = None,
     ) -> str:
         decision_id = _id("dec")
-        run = DecisionRun(id=decision_id, event=self._placeholder_event(decision_id), status="running")
+        run = DecisionRun(
+            id=decision_id, event=self._placeholder_event(decision_id), status="running"
+        )
         with self._lock:
             self._runs[decision_id] = run
 
@@ -98,7 +100,11 @@ class AgentOrchestrator:
         on_complete: Optional[Callable[[], None]] = None,
     ) -> None:
         try:
-            self.run_sync(decision_id=decision_id, template_key=template_key, event_payload=event_payload)
+            self.run_sync(
+                decision_id=decision_id,
+                template_key=template_key,
+                event_payload=event_payload,
+            )
         except Exception as exc:  # pragma: no cover - defensive
             with self._lock:
                 run = self._runs.get(decision_id)
@@ -149,9 +155,13 @@ class AgentOrchestrator:
             mode="PAPER / DEMO" if self.settings.demo_mode else "PAPER",
         )
         self._publish(run)
-        self._stage(run, PipelineStage.EVENT_DETECTED, "Event detected", 
-                    f"{event.title} [{event.importance.value.upper()}] via {event.source}",
-                    payload={"event_id": event.id, "category": event.category.value})
+        self._stage(
+            run,
+            PipelineStage.EVENT_DETECTED,
+            "Event detected",
+            f"{event.title} [{event.importance.value.upper()}] via {event.source}",
+            payload={"event_id": event.id, "category": event.category.value},
+        )
 
         analysis = self._stage_analysis(run, event)
         if analysis is None:
@@ -213,11 +223,37 @@ class AgentOrchestrator:
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             attempts = int(getattr(exc, "attempts", 0) or 0) or 1
             reason = sanitize_llm_error(exc)
-            fallback = self._demo_fallback(event)
 
+            # When Qwen is explicitly configured (API key present), never
+            # silently substitute mock data for a real signal.  The user
+            # asked for Qwen; if it fails, the run must fail loudly so the
+            # error is visible in the dashboard and audit log.
+            if self.settings.qwen_available:
+                run.llm_provider = mode
+                run.error = reason
+                self._stage(
+                    run,
+                    PipelineStage.QWEN_ANALYSIS,
+                    "Qwen analysis failed",
+                    reason,
+                    status="error",
+                    duration_ms=elapsed_ms,
+                    payload={
+                        "attempts": attempts,
+                        "latency_ms": elapsed_ms,
+                        "error": reason,
+                    },
+                )
+                self.repository.audit(
+                    "qwen_service",
+                    "llm_analysis_failed",
+                    f"event={event.id} attempts={attempts} latency_ms={elapsed_ms} error={reason}",
+                )
+                return None
+
+            # Qwen was NOT configured -- demo fallback is the intended path.
+            fallback = self._demo_fallback(event)
             if fallback is not None:
-                # Degrade loudly, never silently: the provider label, the
-                # timeline entry and `run.error` all say the LLM failed.
                 fallback.provider = "demo-mock-fallback"
                 fallback.latency_ms = elapsed_ms
                 fallback.attempts = attempts
@@ -246,8 +282,7 @@ class AgentOrchestrator:
                 )
                 return fallback
 
-            # No demo interpreter available (demo mode off): fail hard rather
-            # than substitute invented analysis for a real signal.
+            # No demo interpreter available either: fail hard.
             run.llm_provider = mode
             run.error = reason
             self._stage(
@@ -257,7 +292,11 @@ class AgentOrchestrator:
                 reason,
                 status="error",
                 duration_ms=elapsed_ms,
-                payload={"attempts": attempts, "latency_ms": elapsed_ms, "error": reason},
+                payload={
+                    "attempts": attempts,
+                    "latency_ms": elapsed_ms,
+                    "error": reason,
+                },
             )
             return None
 
@@ -272,7 +311,8 @@ class AgentOrchestrator:
                 f"{analysis.market_regime.value.replace('_', '-')} | confidence {analysis.confidence:.0%} | "
                 f"{analysis.model}"
             ),
-            duration_ms=analysis.latency_ms or int((time.perf_counter() - started) * 1000),
+            duration_ms=analysis.latency_ms
+            or int((time.perf_counter() - started) * 1000),
             payload=analysis.model_dump(mode="json", exclude={"raw_output"}),
         )
         self.repository.audit(
@@ -290,17 +330,23 @@ class AgentOrchestrator:
         analysis = DemoLLMService().analyze_event(event)
         return analysis
 
-    def _stage_impact(self, run: DecisionRun, analysis: QwenAnalysis, template: Any) -> None:
+    def _stage_impact(
+        self, run: DecisionRun, analysis: QwenAnalysis, template: Any
+    ) -> None:
         shocks: Dict[str, float] = {}
         if template is not None and getattr(template, "price_shocks", None):
             shocks = dict(template.price_shocks)
         else:
             for asset in analysis.affected_assets:
                 magnitude = (asset.impact_score / 100.0) * 0.02
-                shocks[asset.symbol] = magnitude if asset.direction.value == "positive" else -magnitude
+                shocks[asset.symbol] = (
+                    magnitude if asset.direction.value == "positive" else -magnitude
+                )
         tick = self.execution.advance_market(shocks)
 
-        ranked = sorted(analysis.affected_assets, key=lambda a: a.impact_score, reverse=True)
+        ranked = sorted(
+            analysis.affected_assets, key=lambda a: a.impact_score, reverse=True
+        )
         detail = ", ".join(
             f"{a.symbol} {a.direction.value} {a.impact_score}" for a in ranked[:6]
         )
@@ -316,7 +362,9 @@ class AgentOrchestrator:
             },
         )
 
-    def _stage_signal(self, run: DecisionRun, event: Event, analysis: QwenAnalysis) -> Signal:
+    def _stage_signal(
+        self, run: DecisionRun, event: Event, analysis: QwenAnalysis
+    ) -> Signal:
         signal = Signal(
             id=_id("sig"),
             event_id=event.id,
@@ -333,9 +381,13 @@ class AgentOrchestrator:
             model=analysis.model,
         )
         run.signal = signal
-        actions = ", ".join(
-            f"{a.action.value} {a.symbol} {a.percentage:g}%" for a in signal.proposed_actions
-        ) or "no change"
+        actions = (
+            ", ".join(
+                f"{a.action.value} {a.symbol} {a.percentage:g}%"
+                for a in signal.proposed_actions
+            )
+            or "no change"
+        )
         self._stage(
             run,
             PipelineStage.SIGNAL_GENERATED,
@@ -349,8 +401,12 @@ class AgentOrchestrator:
     def _stage_risk(self, run: DecisionRun, signal: Signal) -> Any:
         risk = self.risk_engine.evaluate(signal)
         run.risk = risk
-        failed = [name for name, result in risk.checks.items() if result.value == "FAIL"]
-        warned = [name for name, result in risk.checks.items() if result.value == "WARN"]
+        failed = [
+            name for name, result in risk.checks.items() if result.value == "FAIL"
+        ]
+        warned = [
+            name for name, result in risk.checks.items() if result.value == "WARN"
+        ]
         detail = f"{risk.status.value}"
         if failed:
             detail += f" | failed: {', '.join(failed)}"
@@ -363,9 +419,9 @@ class AgentOrchestrator:
             PipelineStage.RISK_CHECK,
             f"Risk engine: {risk.status.value}",
             detail,
-            status="success" if risk.status == RiskStatus.APPROVED else (
-                "warning" if risk.status == RiskStatus.REDUCED else "error"
-            ),
+            status="success"
+            if risk.status == RiskStatus.APPROVED
+            else ("warning" if risk.status == RiskStatus.REDUCED else "error"),
             payload=risk.to_public_dict(),
         )
         self.repository.audit(
@@ -375,7 +431,9 @@ class AgentOrchestrator:
         )
         return risk
 
-    def _stage_execution(self, run: DecisionRun, signal: Signal, risk: Any, event: Event) -> None:
+    def _stage_execution(
+        self, run: DecisionRun, signal: Signal, risk: Any, event: Event
+    ) -> None:
         if risk.status == RiskStatus.REJECTED:
             self._stage(
                 run,
@@ -385,7 +443,9 @@ class AgentOrchestrator:
                 status="error",
                 payload={"executed": False, "trades": []},
             )
-            self.repository.audit("execution_service", "execution_blocked", f"decision={run.id}")
+            self.repository.audit(
+                "execution_service", "execution_blocked", f"decision={run.id}"
+            )
             return
 
         trades = self.execution.execute(risk, signal, run.id, event.id)
@@ -404,14 +464,18 @@ class AgentOrchestrator:
             return
 
         detail = ", ".join(
-            f"{t.action.value} {t.quantity:,.4f} {t.symbol} @ ${t.price:,.2f}" for t in trades
+            f"{t.action.value} {t.quantity:,.4f} {t.symbol} @ ${t.price:,.2f}"
+            for t in trades
         )
         self._stage(
             run,
             PipelineStage.EXECUTION,
             f"PAPER TRADE EXECUTED ({len(trades)} fill{'s' if len(trades) != 1 else ''})",
             detail,
-            payload={"executed": True, "trades": [t.model_dump(mode="json") for t in trades]},
+            payload={
+                "executed": True,
+                "trades": [t.model_dump(mode="json") for t in trades],
+            },
         )
 
     def _stage_portfolio(self, run: DecisionRun) -> None:
