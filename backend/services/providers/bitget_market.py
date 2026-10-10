@@ -20,7 +20,7 @@ class BitgetMarketData:
     def get_ticker(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get current ticker for a symbol (e.g., BTCUSDT)."""
         try:
-            url = f"{self.BASE_URL}/api/spot/v1/market/ticker?symbol={symbol}"
+            url = f"{self.BASE_URL}/api/v2/spot/market/tickers?symbol={symbol}"
             request = urllib.request.Request(
                 url, headers={"Accept": "application/json"}
             )
@@ -54,14 +54,18 @@ class BitgetMarketData:
     def get_funding_rate(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get current funding rate for a futures symbol (e.g., BTCUSDT)."""
         try:
-            url = f"{self.BASE_URL}/api/mix/v1/market/current-fundRate?symbol={symbol}&productType=umcbl"
+            url = f"{self.BASE_URL}/api/v2/mix/market/current-fund-rate?symbol={symbol}&productType=USDT-FUTURES"
             request = urllib.request.Request(
                 url, headers={"Accept": "application/json"}
             )
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 data = json.loads(response.read().decode("utf-8"))
                 if data.get("code") == "00000" and data.get("data"):
-                    return data["data"]
+                    return (
+                        data["data"][0]
+                        if isinstance(data["data"], list)
+                        else data["data"]
+                    )
         except Exception:
             pass
         return None
@@ -112,8 +116,8 @@ class BitgetMarketData:
             if ticker:
                 prices[symbol] = {
                     "price": float(ticker.get("lastPr", 0)),
-                    "bid": float(ticker.get("bestBid", 0)),
-                    "ask": float(ticker.get("bestAsk", 0)),
+                    "bid": float(ticker.get("bidPr", 0)),
+                    "ask": float(ticker.get("askPr", 0)),
                     "volume_24h": float(ticker.get("baseVolume", 0)),
                     "quote_volume_24h": float(ticker.get("quoteVolume", 0)),
                     "change_24h": float(ticker.get("change24h", 0)),
