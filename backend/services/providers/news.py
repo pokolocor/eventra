@@ -252,136 +252,177 @@ class FinnhubNewsProvider(NewsProvider):
         }
 
 
-class GDELTNewsProvider(NewsProvider):
-    """Free global events from GDELT Project (no API key required).
+class RSSNewsProvider(NewsProvider):
+    """Free financial news from RSS feeds (no API key required).
 
-    GDELT monitors news from every country in 100+ languages and identifies
-    the people, locations, and themes that drive global events.
-    Website: https://www.gdeltproject.org/
+    Parses RSS feeds from major financial news sources.
     """
 
-    name = "gdelt"
-    BASE_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
+    name = "rss"
 
-    # Map GDELT themes to Eventra categories
-    THEME_MAP = {
-        "ECON": "macro",
-        "FINANCE": "macro",
-        "POL": "geopolitical",
-        "GOV": "geopolitical",
-        "CRIME": "other",
-        "PROTEST": "geopolitical",
-        "WAR": "geopolitical",
-        "HEALTH": "other",
-        "ENV": "commodity",
-        "ENERGY": "commodity",
-        "TECH": "other",
-    }
+    # Major financial news RSS feeds
+    FEEDS = [
+        (
+            "CNBC",
+            "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+        ),  # Top News
+        (
+            "CNBC",
+            "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664",
+        ),  # Economy
+        (
+            "CNBC",
+            "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147",
+        ),  # Markets
+        ("MarketWatch", "http://feeds.marketwatch.com/marketwatch/topstories/"),
+        ("MarketWatch", "http://feeds.marketwatch.com/marketwatch/marketpulse/"),
+    ]
 
-    def __init__(self, timeout: float = 15.0) -> None:
+    def __init__(self, timeout: float = 10.0) -> None:
         self.timeout = timeout
 
     def fetch_events(
         self, limit: int = 25, since: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
-        # Query for recent financial/economic news
-        from urllib.parse import urlencode
-
-        query = "finance OR economy OR market OR fed OR inflation OR earnings"
-        params = urlencode(
-            {
-                "query": query,
-                "mode": "artlist",
-                "format": "json",
-                "maxrecords": min(limit, 50),
-                "timespan": "1d",
-                "sort": "datedesc",
-            }
-        )
-        url = f"{self.BASE_URL}?{params}"
-
-        request = urllib.request.Request(url, headers={"Accept": "application/json"})
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except (
-            urllib.error.URLError,
-            TimeoutError,
-            json.JSONDecodeError,
-            urllib.error.HTTPError,
-        ):
-            return []
-
-        articles = payload.get("articles", [])
-        if not isinstance(articles, list):
-            return []
+        import xml.etree.ElementTree as ET
 
         events: List[Dict[str, Any]] = []
-        for item in articles:
-            mapped = self._map_item(item)
-            if mapped is None:
-                continue
-            timestamp = mapped["timestamp"]
-            if since is not None and timestamp < since:
-                continue
-            events.append(mapped)
+
+        for source_name, feed_url in self.FEEDS:
             if len(events) >= limit:
                 break
 
+            try:
+                request = urllib.request.Request(
+                    feed_url,
+                    headers={"User-Agent": "Eventra/1.0 (Financial News Aggregator)"},
+                )
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    xml_data = response.read().decode("utf-8")
+
+                root = ET.fromstring(xml_data)
+
+                # Parse RSS 2.0 format
+                for item in root.findall(".//item"):
+                    if len(events) >= limit:
+                        break
+
+                    title = item.findtext("title", "").strip()
+                    if not title:
+                        continue
+
+                    link = item.findtext("link", "").strip()
+                    description = item.findtext("description", "").strip()
+                    pub_date = item.findtext("pubDate", "").strip()
+
+                    # Parse date
+                    timestamp = self._parse_date(pub_date)
+
+                    if since is not None and timestamp < since:
+                        continue
+
+                    # Determine category and importance
+                    category = self._guess_category(title, description)
+                    importance = self._guess_importance(title, description)
+
+                    # Extract tickers
+                    assets = self._extract_tickers(title + " " + description)
+
+                    event_id = _stable_id(title, source_name)
+
+                    events.append(
+                        {
+                            "id": event_id,
+                            "timestamp": timestamp.isoformat(),
+                            "title": title,
+                            "source": source_name,
+                            "category": category,
+                            "summary": description[:500] if description else "",
+                            "affected_assets": assets[:5],
+                            "importance": importance,
+                            "raw": {"provider": "rss", "link": link, "feed": feed_url},
+                            "is_simulated": False,
+                        }
+                    )
+
+            except Exception as e:
+                # Skip failed feeds silently
+                continue
+
         events.sort(key=lambda e: e["timestamp"], reverse=True)
-        return events
+        return events[:limit]
 
-    def _map_item(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        title = str(item.get("title") or "").strip()
-        if not title:
-            return None
+    def _parse_date(self, date_str: str) -> datetime:
+        """Parse RSS date format."""
+        if not date_str:
+            return datetime.now(timezone.utc)
 
-        # Parse timestamp
-        raw_ts = item.get("seendate") or item.get("date")
-        try:
-            # GDELT format: 20261010T120000Z
-            if raw_ts and len(raw_ts) >= 15:
-                timestamp = datetime.strptime(raw_ts[:15], "%Y%m%dT%H%M%S")
-                timestamp = timestamp.replace(tzinfo=timezone.utc)
-            else:
-                timestamp = datetime.now(timezone.utc)
-        except (TypeError, ValueError):
-            timestamp = datetime.now(timezone.utc)
+        # Try common RSS date formats
+        formats = [
+            "%a, %d %b %Y %H:%M:%S %z",  # RFC 822
+            "%a, %d %b %Y %H:%M:%S %Z",
+            "%Y-%m-%dT%H:%M:%S%z",  # ISO 8601
+            "%Y-%m-%d %H:%M:%S",
+        ]
 
-        # Extract source
-        source = str(item.get("domain") or item.get("source") or "unknown")
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(date_str, fmt)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except ValueError:
+                continue
 
-        # Determine category from themes
-        themes = item.get("theme") or []
-        if isinstance(themes, str):
-            themes = [themes]
+        return datetime.now(timezone.utc)
 
-        eventra_cat = "other"
-        for theme in themes:
-            theme_upper = theme.upper()
-            for key, value in self.THEME_MAP.items():
-                if key in theme_upper:
-                    eventra_cat = value
-                    break
-            if eventra_cat != "other":
-                break
+    def _guess_category(self, title: str, description: str) -> str:
+        """Guess event category from content."""
+        text = (title + " " + description).lower()
 
-        # Determine importance
-        summary = str(item.get("summary") or "")
-        importance = "medium"
-        title_lower = title.lower()
         if any(
-            kw in title_lower
-            for kw in ["fed", "fomc", "cpi", "gdp", "jobs", "inflation", "rate"]
+            kw in text
+            for kw in ["fed", "fomc", "interest rate", "monetary policy", "powell"]
         ):
-            importance = "high"
-        elif any(kw in title_lower for kw in ["market", "stock", "bond", "crypto"]):
-            importance = "medium"
+            return "central_bank"
+        elif any(kw in text for kw in ["cpi", "inflation", "price", "deflation"]):
+            return "inflation"
+        elif any(
+            kw in text
+            for kw in ["gdp", "employment", "jobs", "unemployment", "payroll"]
+        ):
+            return "employment"
+        elif any(kw in text for kw in ["earnings", "revenue", "profit", "quarter"]):
+            return "earnings"
+        elif any(kw in text for kw in ["crypto", "bitcoin", "ethereum", "blockchain"]):
+            return "crypto"
+        elif any(kw in text for kw in ["oil", "opec", "commodity", "gold", "silver"]):
+            return "commodity"
+        elif any(kw in text for kw in ["geopolitical", "war", "sanction", "trade war"]):
+            return "geopolitical"
+        else:
+            return "macro"
 
-        # Try to extract mentioned assets
-        assets = []
-        # Look for common tickers in title
-        ticker_patterns = [
+    def _guess_importance(self, title: str, description: str) -> str:
+        """Guess event importance."""
+        text = (title + " " + description).lower()
+
+        if any(
+            kw in text
+            for kw in ["breaking", "urgent", "fed", "fomc", "rate decision", "cpi"]
+        ):
+            return "critical"
+        elif any(kw in text for kw in ["major", "significant", "surprise", "shock"]):
+            return "high"
+        elif any(kw in text for kw in ["market", "stock", "bond", "treasury"]):
+            return "medium"
+        else:
+            return "low"
+
+    def _extract_tickers(self, text: str) -> List[str]:
+        """Extract stock tickers from text."""
+        # Common tickers to look for
+        known_tickers = [
             "AAPL",
             "GOOGL",
             "MSFT",
@@ -389,24 +430,48 @@ class GDELTNewsProvider(NewsProvider):
             "TSLA",
             "NVDA",
             "META",
+            "NFLX",
             "SPY",
             "QQQ",
+            "IWM",
+            "DIA",
+            "TLT",
+            "GLD",
+            "SLV",
+            "USO",
             "BTC",
             "ETH",
+            "SOL",
+            "XRP",
+            "ADA",
+            "DOT",
+            "JPM",
+            "BAC",
+            "GS",
+            "MS",
+            "C",
+            "WFC",
+            "XOM",
+            "CVX",
+            "COP",
+            "SLB",
+            "JNJ",
+            "PFE",
+            "MRNA",
+            "ABBV",
         ]
-        for ticker in ticker_patterns:
-            if ticker in title.upper():
-                assets.append(ticker)
 
-        return {
-            "id": _stable_id(title, source),
-            "timestamp": timestamp.isoformat(),
-            "title": title,
-            "source": source,
-            "category": eventra_cat,
-            "summary": summary[:500] if summary else "",
-            "affected_assets": assets[:5],
-            "importance": importance,
-            "raw": item,
-            "is_simulated": False,
-        }
+        text_upper = text.upper()
+        found = []
+        for ticker in known_tickers:
+            # Check for ticker as whole word
+            if (
+                f" ${ticker}" in text_upper
+                or f" {ticker} " in text_upper
+                or text_upper.startswith(ticker + " ")
+                or text_upper.endswith(" " + ticker)
+            ):
+                found.append(ticker)
+
+        return found
+

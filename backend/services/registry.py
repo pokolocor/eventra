@@ -27,7 +27,7 @@ from backend.services.providers.market_data import (
 from backend.services.providers.news import (
     DemoNewsProvider,
     FinnhubNewsProvider,
-    GDELTNewsProvider,
+    RSSNewsProvider,
     HttpNewsProvider,
     NewsProvider,
 )
@@ -50,7 +50,7 @@ def build_news_provider(settings: Settings) -> NewsProvider:
 
     Priority:
     1. Finnhub (if FINNHUB_API_KEY is set) - paid, high quality
-    2. GDELT (default) - free, no API key required, global events
+    2. RSS (default) - free, no API key required, real financial news from CNBC/MarketWatch
     3. Demo (if EVENTRA_USE_DEMO_NEWS=true) - for testing
     """
     import os
@@ -69,8 +69,8 @@ def build_news_provider(settings: Settings) -> NewsProvider:
     if use_demo:
         return DemoNewsProvider()
 
-    # Default to GDELT (free, no API key needed)
-    return GDELTNewsProvider()
+    # Default to RSS (free, no API key needed, real financial news)
+    return RSSNewsProvider()
 
 
 class ServiceRegistry:
