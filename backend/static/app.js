@@ -139,6 +139,7 @@ function hideOfflineBanner() {
 
 function setConn(ok) {
   const el = $("#connBadge");
+  if (!el) return;
   el.textContent = ok ? "LIVE" : "OFFLINE";
   el.className = "badge " + (ok ? "ok" : "err");
 }
@@ -146,19 +147,27 @@ function setConn(ok) {
 async function refreshStatus() {
   state.status = await api("/api/system/status");
   state.killSwitch = !!state.status.kill_switch;
-  $("#modeBadge").textContent = state.status.mode || "PAPER / DEMO";
+  const modeEl = $("#modeBadge"); if (modeEl) modeEl.textContent = state.status.mode || "PAPER / DEMO";
   const llm = state.status.llm || {};
-  $("#llmBadge").textContent = "LLM " + (llm.provider === "qwen" ? "QWEN " + (llm.model || "") : "DEMO MOCK");
-  $("#llmBadge").className = "badge " + (llm.provider === "qwen" ? "ok" : "warn");
+  const llmEl = $("#llmBadge"); if (llmEl) {
+    llmEl.textContent = "LLM " + (llm.provider === "qwen" ? "QWEN " + (llm.model || "") : "DEMO MOCK");
+    llmEl.className = "badge " + (llm.provider === "qwen" ? "ok" : "warn");
+  }
   const news = state.status.news || {};
-  $("#newsBadge").textContent = "NEWS " + (news.live ? "LIVE (" + news.provider.toUpperCase() + ")" : "DEMO");
-  $("#newsBadge").className = "badge " + (news.live ? "ok" : "warn");
-  $("#newsProvider").textContent = news.live ? "LIVE" : "DEMO";
-  $("#newsProvider").className = "badge " + (news.live ? "ok" : "warn");
-  $("#dbBadge").textContent = "STORE " + String((state.status.database || {}).backend || "?").toUpperCase();
+  const newsEl = $("#newsBadge"); if (newsEl) {
+    newsEl.textContent = "NEWS " + (news.live ? "LIVE (" + news.provider.toUpperCase() + ")" : "DEMO");
+    newsEl.className = "badge " + (news.live ? "ok" : "warn");
+  }
+  const npEl = $("#newsProvider"); if (npEl) {
+    npEl.textContent = news.live ? "LIVE" : "DEMO";
+    npEl.className = "badge " + (news.live ? "ok" : "warn");
+  }
+  const dbEl = $("#dbBadge"); if (dbEl) dbEl.textContent = "STORE " + String((state.status.database || {}).backend || "?").toUpperCase();
   const ks = $("#killSwitch");
-  ks.classList.toggle("armed", state.killSwitch);
-  ks.textContent = state.killSwitch ? "KILL SWITCH ARMED" : "KILL SWITCH";
+  if (ks) {
+    ks.classList.toggle("armed", state.killSwitch);
+    ks.textContent = state.killSwitch ? "KILL SWITCH ARMED" : "KILL SWITCH";
+  }
 }
 
 async function tick() {
@@ -211,11 +220,13 @@ function renderKpis(p) {
     kpiCard("Realised PnL", money(p.realized_pnl), `Unrealised ${money(p.unrealized_pnl)}`,
       p.realized_pnl >= 0 ? "up" : "down"),
   ].join("");
-  $("#posMeta").textContent = `${p.positions.length} held`;
-  $("#chartMeta").textContent = `${money(p.portfolio_value)}  ${pct(p.total_return_pct)}`;
+  const posMetaEl = $("#posMeta"); if (posMetaEl) posMetaEl.textContent = `${p.positions.length} held`;
+  const chartMetaEl = $("#chartMeta"); if (chartMetaEl) chartMetaEl.textContent = `${money(p.portfolio_value)}  ${pct(p.total_return_pct)}`;
 }
 
 function renderPositions(p) {
+  const table = $("#positions");
+  if (!table) return;
   const rows = p.positions.map((r) => `
     <tr>
       <td class="sym">${esc(r.symbol)}<div style="font-size:9px;color:var(--dim);font-weight:400">${esc(r.asset_class)}</div></td>
@@ -227,7 +238,7 @@ function renderPositions(p) {
       <td><span class="conv"><i style="width:${Math.round((r.conviction || 0) * 100)}%"></i></span>
         <span style="font-size:9.5px;color:var(--muted)">${Math.round((r.conviction || 0) * 100)}%</span></td>
     </tr>`).join("");
-  $("#positions tbody").innerHTML = rows || `<tr><td colspan="7" class="empty">Flat book.</td></tr>`;
+  table.querySelector("tbody").innerHTML = rows || `<tr><td colspan="7" class="empty">Flat book.</td></tr>`;
 }
 
 /* ---------------- portfolio chart ---------------- */
@@ -715,6 +726,7 @@ async function loadMarketStatus() {
     const data = await api("/api/market/weekend");
     const statusEl = $("#marketStatus");
     const contentEl = $("#weekendStatus");
+    if (!statusEl || !contentEl) return;
     
     statusEl.textContent = data.market_status;
     statusEl.className = "badge " + (data.is_market_open ? "ok" : "warn");
@@ -855,17 +867,18 @@ async function loadBitgetMarketData() {
     const data = await api('/api/market/live');
     updateCryptoPricesTable(data.prices);
     updateFundingRatesTable(data.funding_rates);
-    document.getElementById('bitgetBadge').textContent = 'LIVE';
-    document.getElementById('bitgetBadge').className = 'badge ok';
+    const badge = document.getElementById('bitgetBadge');
+    if (badge) { badge.textContent = 'LIVE'; badge.className = 'badge ok'; }
   } catch (err) {
     console.error('Failed to load Bitget market data:', err);
-    document.getElementById('bitgetBadge').textContent = 'OFFLINE';
-    document.getElementById('bitgetBadge').className = 'badge err';
+    const badge = document.getElementById('bitgetBadge');
+    if (badge) { badge.textContent = 'OFFLINE'; badge.className = 'badge err'; }
   }
 }
 
 function updateCryptoPricesTable(prices) {
   const tbody = document.querySelector('#cryptoPrices tbody');
+  if (!tbody) return;
   if (!prices || Object.keys(prices).length === 0) {
     tbody.innerHTML = '<tr><td colspan="4" class="empty">No price data available</td></tr>';
     return;
@@ -891,6 +904,7 @@ function updateCryptoPricesTable(prices) {
 
 function updateFundingRatesTable(rates) {
   const tbody = document.querySelector('#fundingRates tbody');
+  if (!tbody) return;
   if (!rates || Object.keys(rates).length === 0) {
     tbody.innerHTML = '<tr><td colspan="3" class="empty">No funding rate data available</td></tr>';
     return;
