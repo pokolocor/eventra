@@ -102,13 +102,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         f"news={registry.news.name} | db={settings.database_url}"
     )
 
-    # Initial sync on startup for live providers
+    # Initial sync on startup for live providers (non-blocking)
     if registry.news.name != "demo":
-        try:
-            fresh = registry.events.sync(limit=20)
-            logger.info(f"Initial sync: {len(fresh)} events from {registry.news.name}")
-        except Exception as exc:
-            logger.warning(f"Initial sync failed: {exc}")
+
+        async def _initial_sync():
+            try:
+                # Run sync in thread pool to avoid blocking
+                fresh = await asyncio.to_thread(registry.events.sync, limit=20)
+                logger.info(
+                    f"Initial sync: {len(fresh)} events from {registry.news.name}"
+                )
+            except Exception as exc:
+                logger.warning(f"Initial sync failed: {exc}")
+
+        asyncio.create_task(_initial_sync())
 
     try:
         yield
