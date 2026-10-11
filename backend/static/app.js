@@ -865,6 +865,7 @@ async function loadMetrics() {
 async function loadBitgetMarketData() {
   try {
     const data = await api('/api/market/live');
+    console.log('Bitget market data received:', data);
     updateCryptoPricesTable(data.prices);
     updateFundingRatesTable(data.funding_rates);
     const badge = document.getElementById('bitgetBadge');
@@ -873,6 +874,11 @@ async function loadBitgetMarketData() {
     console.error('Failed to load Bitget market data:', err);
     const badge = document.getElementById('bitgetBadge');
     if (badge) { badge.textContent = 'OFFLINE'; badge.className = 'badge err'; }
+    // Show error in tables
+    const priceTbody = document.querySelector('#cryptoPrices tbody');
+    const rateTbody = document.querySelector('#fundingRates tbody');
+    if (priceTbody) priceTbody.innerHTML = '<tr><td colspan="4" class="empty">Failed to load: ' + err.message + '</td></tr>';
+    if (rateTbody) rateTbody.innerHTML = '<tr><td colspan="3" class="empty">Failed to load: ' + err.message + '</td></tr>';
   }
 }
 

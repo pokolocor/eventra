@@ -46,7 +46,7 @@ class BitgetMarketData:
     def get_all_tickers(self) -> List[Dict[str, Any]]:
         """Get all spot market tickers."""
         try:
-            url = f"{self.BASE_URL}/api/spot/v1/market/tickers"
+            url = f"{self.BASE_URL}/api/v2/spot/market/tickers"
             request = urllib.request.Request(
                 url, headers={"Accept": "application/json"}
             )
@@ -54,8 +54,8 @@ class BitgetMarketData:
                 data = json.loads(response.read().decode("utf-8"))
                 if data.get("code") == "00000" and data.get("data"):
                     return data["data"]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to fetch all tickers: {e}")
         return []
 
     def get_funding_rate(self, symbol: str) -> Optional[Dict[str, Any]]:
@@ -121,6 +121,44 @@ class BitgetMarketData:
                 "MATIC",
             ]
 
+        # Use batch endpoint for efficiency
+        all_tickers = self.get_all_tickers()
+        if not all_tickers:
+            # Fallback to individual calls if batch fails
+            logger.warning(
+                "Batch ticker fetch failed, falling back to individual calls"
+            )
+            return self._get_crypto_prices_individual(symbols)
+
+        # Build symbol lookup map
+        ticker_map = {}
+        for ticker in all_tickers:
+            symbol_name = ticker.get("symbol", "")
+            if symbol_name.endswith("USDT"):
+                base = symbol_name[:-4]
+                ticker_map[base] = ticker
+
+        prices = {}
+        for symbol in symbols:
+            ticker = ticker_map.get(symbol)
+            if ticker:
+                prices[symbol] = {
+                    "price": float(ticker.get("lastPr", 0)),
+                    "bid": float(ticker.get("bidPr", 0)),
+                    "ask": float(ticker.get("askPr", 0)),
+                    "volume_24h": float(ticker.get("baseVolume", 0)),
+                    "quote_volume_24h": float(ticker.get("quoteVolume", 0)),
+                    "change_24h": float(ticker.get("change24h", 0)),
+                    "high_24h": float(ticker.get("high24h", 0)),
+                    "low_24h": float(ticker.get("low24h", 0)),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+        return prices
+
+    def _get_crypto_prices_individual(
+        self, symbols: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Fallback: fetch prices one by one."""
         prices = {}
         for symbol in symbols:
             ticker = self.get_ticker(f"{symbol}USDT")
