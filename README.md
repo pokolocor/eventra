@@ -60,6 +60,27 @@ The Next.js dev server proxies `/api/*` to the backend (see
 `frontend/next.config.mjs`), so the browser never makes a cross-origin call and
 never sees a secret.
 
+### Live News Integration
+
+Eventra automatically fetches **live financial news** from multiple RSS feeds:
+
+- **CNBC** — Top News, Economy, Markets
+- **MarketWatch** — Top Stories, Market Pulse
+- **CoinDesk** — Crypto news and analysis
+- **CoinTelegraph** — Blockchain and DeFi coverage
+
+No API key required! The RSS provider is enabled by default. To force demo mode
+for testing, set `EVENTRA_USE_DEMO_NEWS=true` in your environment.
+
+For higher-quality news, you can also configure **Finnhub** (free tier: 60 calls/min):
+
+```bash
+# Add to backend/.env
+FINNHUB_API_KEY=your_finnhub_api_key
+```
+
+Get your free API key at [finnhub.io](https://finnhub.io/).
+
 ### Bitget Demo Integration
 
 Eventra integrates with **Bitget Demo Trading** for the Bitget AI Base Camp Hackathon.
@@ -145,8 +166,12 @@ eventra/
 │   │   ├── explainability.py    # human-readable "why"
 │   │   ├── registry.py          # composition root
 │   │   └── providers/
-│   │       ├── news.py          # NewsProvider ABC + demo + HTTP reference impl
+│   │       ├── news.py          # NewsProvider ABC + demo + Finnhub + RSS (CNBC, MarketWatch, CoinDesk, CoinTelegraph)
 │   │       ├── market_data.py   # MarketDataProvider ABC + deterministic sim
+│   │       ├── bitget_market.py # Bitget live market data (prices, funding rates)
+│   │       ├── bitget.py        # Bitget demo trading integration
+│   │       ├── rtoken_arbitrage.py # rToken arbitrage detection
+│   │       ├── weekend_detector.py # 7x24 market status detection
 │   │       └── event_templates.py # 12 simulation templates + seeded history
 │   ├── models/domain.py         # Pydantic domain types and enums
 │   ├── schemas/api.py           # HTTP request/response schemas
@@ -173,8 +198,9 @@ Every external dependency sits behind an interface:
 
 | Concern | Interface | Demo implementation | To go live |
 | --- | --- | --- | --- |
-| News / events | `NewsProvider.fetch_events()` | `DemoNewsProvider` (seeded) | implement `HttpNewsProvider._map_item` for Benzinga, Polygon, NewsAPI, Finnhub or RSS |
+| News / events | `NewsProvider.fetch_events()` | `DemoNewsProvider` (seeded) | **Already live:** RSS feeds (CNBC, MarketWatch, CoinDesk, CoinTelegraph) enabled by default. Set `FINNHUB_API_KEY` for premium news, or implement `HttpNewsProvider._map_item` for Benzinga, Polygon, NewsAPI |
 | Prices / liquidity / vol | `MarketDataProvider` | `DemoMarketDataProvider` (seeded walk) | implement `quote()`, `history()`, `advance_tick()` against your vendor |
+| Live market data | `BitgetMarketData` | — | **Already live:** Real-time crypto prices and funding rates from Bitget public API |
 | LLM | `analyze_event(event) -> QwenAnalysis` | `DemoLLMService` | already live: set `QWEN_API_KEY` |
 | Persistence | `Repository` | `JsonFileRepository` | `SqlRepository` + `DATABASE_URL` |
 | Execution | `ExecutionService` | paper fills with slippage/fees | add a broker adapter; keep the risk engine in front of it |
@@ -297,13 +323,18 @@ slippage model and a 0.5bp fee. There is no margin: buys must be funded by cash.
 | Section | What it shows |
 | --- | --- |
 | **Portfolio overview** | Value, today's PnL, total PnL, gross exposure, realised PnL |
-| **Live Event Feed** | Event cards: title, time, source, category, importance, affected assets, Qwen analysis status |
+| **Live Event Feed** | Event cards: title, time, source, category, importance, affected assets, Qwen analysis status. **Live RSS feeds from CNBC, MarketWatch, CoinDesk, CoinTelegraph** |
 | **Agent Decision Center** | The five-stage chain with live status, Qwen interpretation, impact bars, risk-check grid, approved actions, fills |
 | **Portfolio chart** | Equity curve with the starting-balance baseline and hover readout |
 | **Position table** | Asset, qty, entry, last, PnL, weight, agent conviction |
+| **Open Positions** | Detailed view of all open positions with conviction scores |
 | **Decision Timeline** | Chronological record: event detected → Qwen analysis → signal → risk validation → trade executed → portfolio updated, each with duration |
 | **Explainability** | "Why did Eventra do that?" plus the paper trade blotter |
 | **Simulate Event** | Twelve templates across central bank, macro data, earnings, commodities, geopolitics, crypto and two deliberate stress tests |
+| **7x24 Market Status** | Weekend/after-hours detection, rToken trading status, gap risk analysis |
+| **Live Bitget Market Data** | Real-time crypto prices (9 major pairs) and funding rates (5 futures) from Bitget |
+| **rToken Arbitrage** | Arbitrage opportunity detection between rTokens and underlying assets |
+| **Performance Metrics** | Sharpe ratio, Sortino ratio, max drawdown, win rate, profit factor, total fees |
 
 Two UIs ship with the project:
 
@@ -319,14 +350,19 @@ Two UIs ship with the project:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/health` | Liveness, mode, LLM provider, kill-switch state |
+| GET | `/api/ready` | Readiness probe (store reachable) |
 | GET | `/api/system/status` | Full configuration (redacted), limits, counters |
 | POST | `/api/system/kill-switch` | `{"engaged": true|false}` — global emergency stop |
 | POST | `/api/system/reset` | Re-seed the demo book, events and history |
 | GET | `/api/system/audit` | Every agent decision and operator action |
+| POST | `/api/system/analyze-pending` | Analyze all pending events with Qwen |
 | GET | `/api/market/quotes` | Simulated universe: price, change, vol, ADV |
+| GET | `/api/market/live` | **Live** crypto prices and funding rates from Bitget |
+| GET | `/api/market/arbitrage` | rToken arbitrage opportunities |
+| GET | `/api/market/weekend` | 7x24 market status and weekend analysis |
 | GET | `/api/events` | Event feed with per-event analysis status |
 | POST | `/api/events` | Ingest an arbitrary event and run the pipeline |
-| POST | `/api/events/sync` | Pull from the configured news provider |
+| POST | `/api/events/sync` | Pull from the configured news provider (RSS/Finnhub) |
 | GET | `/api/agent/templates` | Simulation catalogue, grouped |
 | POST | `/api/agent/simulate` | `{"template_key": "..."}` → `202 {decision_id}` (async) |
 | POST | `/api/agent/run` | Same pipeline, synchronous, returns the full chain |
@@ -337,6 +373,7 @@ Two UIs ship with the project:
 | GET | `/api/portfolio/history` | Equity curve |
 | GET | `/api/portfolio/trades` | Blotter |
 | GET | `/api/portfolio/positions` | Positions only |
+| GET | `/api/bitget/status` | Bitget demo trading connection status |
 
 `POST /api/agent/simulate` returns immediately and the pipeline runs in a worker
 thread; poll `GET /api/agent/decisions/{id}` to watch the timeline build up stage
@@ -368,6 +405,8 @@ by stage. That is what drives the live "agent is working" animation.
 | `EVENTRA_DUPLICATE_COOLDOWN_MIN` | `30` | Repeat-signal window |
 | `EVENTRA_MAX_ACTIONS_PER_DECISION` | `6` | Fan-out cap |
 | `EVENTRA_NEWS_URL` / `EVENTRA_NEWS_TOKEN` / `EVENTRA_NEWS_ITEMS_KEY` | *(empty)* | Optional live news provider |
+| `FINNHUB_API_KEY` | *(empty)* | Finnhub API key for premium news (free tier: 60 calls/min) |
+| `EVENTRA_USE_DEMO_NEWS` | `false` | Force demo news provider (for testing) |
 | `EVENTRA_CORS_ORIGINS` | `http://localhost:3000,…` | Comma-separated allow-list |
 
 ---

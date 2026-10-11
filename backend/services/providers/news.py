@@ -276,6 +276,9 @@ class RSSNewsProvider(NewsProvider):
         ),  # Markets
         ("MarketWatch", "http://feeds.marketwatch.com/marketwatch/topstories/"),
         ("MarketWatch", "http://feeds.marketwatch.com/marketwatch/marketpulse/"),
+        # Crypto-specific feeds
+        ("CoinDesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
+        ("CoinTelegraph", "https://cointelegraph.com/rss"),
     ]
 
     def __init__(self, timeout: float = 10.0) -> None:
@@ -288,10 +291,8 @@ class RSSNewsProvider(NewsProvider):
 
         events: List[Dict[str, Any]] = []
 
+        # Fetch from all feeds first, then limit
         for source_name, feed_url in self.FEEDS:
-            if len(events) >= limit:
-                break
-
             try:
                 request = urllib.request.Request(
                     feed_url,
@@ -304,9 +305,6 @@ class RSSNewsProvider(NewsProvider):
 
                 # Parse RSS 2.0 format
                 for item in root.findall(".//item"):
-                    if len(events) >= limit:
-                        break
-
                     title = item.findtext("title", "").strip()
                     if not title:
                         continue
@@ -349,6 +347,7 @@ class RSSNewsProvider(NewsProvider):
                 # Skip failed feeds silently
                 continue
 
+        # Sort by timestamp (newest first) and limit
         events.sort(key=lambda e: e["timestamp"], reverse=True)
         return events[:limit]
 
@@ -394,7 +393,27 @@ class RSSNewsProvider(NewsProvider):
             return "employment"
         elif any(kw in text for kw in ["earnings", "revenue", "profit", "quarter"]):
             return "earnings"
-        elif any(kw in text for kw in ["crypto", "bitcoin", "ethereum", "blockchain"]):
+        elif any(
+            kw in text
+            for kw in [
+                "crypto",
+                "bitcoin",
+                "ethereum",
+                "blockchain",
+                "defi",
+                "nft",
+                "web3",
+                "token",
+                "mining",
+                "staking",
+                "sec crypto",
+                "crypto regulation",
+                "crypto ban",
+                "crypto law",
+                "digital asset",
+                "stablecoin",
+            ]
+        ):
             return "crypto"
         elif any(kw in text for kw in ["oil", "opec", "commodity", "gold", "silver"]):
             return "commodity"
@@ -407,21 +426,69 @@ class RSSNewsProvider(NewsProvider):
         """Guess event importance."""
         text = (title + " " + description).lower()
 
+        # Critical importance
         if any(
             kw in text
-            for kw in ["breaking", "urgent", "fed", "fomc", "rate decision", "cpi"]
+            for kw in [
+                "breaking",
+                "urgent",
+                "fed",
+                "fomc",
+                "rate decision",
+                "cpi",
+                "bitcoin halving",
+                "crypto ban",
+                "sec enforcement",
+                "major hack",
+                "exchange collapse",
+                "stablecoin depeg",
+            ]
         ):
             return "critical"
-        elif any(kw in text for kw in ["major", "significant", "surprise", "shock"]):
+        # High importance
+        elif any(
+            kw in text
+            for kw in [
+                "major",
+                "significant",
+                "surprise",
+                "shock",
+                "bitcoin",
+                "ethereum",
+                "crypto regulation",
+                "defi",
+                "nft",
+                "web3",
+                "token launch",
+                "ipo",
+                "merger",
+                "acquisition",
+                "bankruptcy",
+            ]
+        ):
             return "high"
-        elif any(kw in text for kw in ["market", "stock", "bond", "treasury"]):
+        # Medium importance
+        elif any(
+            kw in text
+            for kw in [
+                "market",
+                "stock",
+                "bond",
+                "treasury",
+                "crypto",
+                "trading",
+                "investment",
+                "fund",
+                "portfolio",
+            ]
+        ):
             return "medium"
         else:
             return "low"
 
     def _extract_tickers(self, text: str) -> List[str]:
-        """Extract stock tickers from text."""
-        # Common tickers to look for
+        """Extract stock tickers and crypto symbols from text."""
+        # Common stock tickers
         known_tickers = [
             "AAPL",
             "GOOGL",
@@ -439,12 +506,6 @@ class RSSNewsProvider(NewsProvider):
             "GLD",
             "SLV",
             "USO",
-            "BTC",
-            "ETH",
-            "SOL",
-            "XRP",
-            "ADA",
-            "DOT",
             "JPM",
             "BAC",
             "GS",
@@ -461,10 +522,39 @@ class RSSNewsProvider(NewsProvider):
             "ABBV",
         ]
 
+        # Crypto symbols (case-insensitive matching)
+        crypto_symbols = [
+            "BTC",
+            "ETH",
+            "SOL",
+            "XRP",
+            "ADA",
+            "DOT",
+            "MATIC",
+            "AVAX",
+            "BNB",
+            "DOGE",
+            "SHIB",
+            "LINK",
+            "UNI",
+            "ATOM",
+            "LTC",
+            "BCH",
+            "ALGO",
+            "XLM",
+            "VET",
+            "ICP",
+            "FIL",
+            "TRX",
+            "NEAR",
+            "APT",
+        ]
+
         text_upper = text.upper()
         found = []
+
+        # Check stock tickers
         for ticker in known_tickers:
-            # Check for ticker as whole word
             if (
                 f" ${ticker}" in text_upper
                 or f" {ticker} " in text_upper
@@ -473,5 +563,40 @@ class RSSNewsProvider(NewsProvider):
             ):
                 found.append(ticker)
 
-        return found
+        # Check crypto symbols (also check for full names)
+        crypto_names = {
+            "BITCOIN": "BTC",
+            "ETHEREUM": "ETH",
+            "SOLANA": "SOL",
+            "RIPPLE": "XRP",
+            "CARDANO": "ADA",
+            "POLKADOT": "DOT",
+            "POLYGON": "MATIC",
+            "AVALANCHE": "AVAX",
+            "BINANCE": "BNB",
+            "DOGECOIN": "DOGE",
+            "SHIBA INU": "SHIB",
+            "CHAINLINK": "LINK",
+            "UNISWAP": "UNI",
+            "COSMOS": "ATOM",
+            "LITECOIN": "LTC",
+        }
 
+        for crypto in crypto_symbols:
+            if (
+                f" ${crypto}" in text_upper
+                or f" {crypto} " in text_upper
+                or text_upper.startswith(crypto + " ")
+                or text_upper.endswith(" " + crypto)
+                or f"/{crypto}" in text_upper
+                or f"{crypto}/" in text_upper
+            ):
+                if crypto not in found:
+                    found.append(crypto)
+
+        # Check for crypto names and map to symbols
+        for name, symbol in crypto_names.items():
+            if name in text_upper and symbol not in found:
+                found.append(symbol)
+
+        return found
