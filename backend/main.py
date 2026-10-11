@@ -39,7 +39,8 @@ async def auto_sync_and_analyze() -> None:
 
             # Only sync if using a live provider (not demo)
             if registry.news.name != "demo":
-                fresh = registry.events.sync(limit=20)
+                # Run sync in thread pool to avoid blocking event loop
+                fresh = await asyncio.to_thread(registry.events.sync, limit=20)
                 if fresh:
                     logger.info(
                         f"Auto-sync: {len(fresh)} new events from {registry.news.name}"
@@ -59,9 +60,10 @@ async def auto_sync_and_analyze() -> None:
             analyzed = 0
             for event in pending_events[:3]:  # Max 3 per cycle
                 try:
-                    # Run the agent on this event
-                    run = registry.orchestrator.run_sync(
-                        event_payload=event.model_dump(mode="json")
+                    # Run the agent on this event in thread pool to avoid blocking
+                    run = await asyncio.to_thread(
+                        registry.orchestrator.run_sync,
+                        event_payload=event.model_dump(mode="json"),
                     )
                     if run.status == "completed":
                         analyzed += 1
